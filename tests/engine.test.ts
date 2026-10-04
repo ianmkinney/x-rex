@@ -33,7 +33,7 @@ test('analysis is reproducible, respects overrides, and avoids token substring m
  const text='AI agent automation workflow API';
  assert.deepEqual(analyze(text,ARCHETYPES,DEFAULT_CONTEXT),analyze(text,ARCHETYPES,DEFAULT_CONTEXT));
  assert.equal(analyze(text,ARCHETYPES,DEFAULT_CONTEXT)[0].archetype.id,'ai-builders');
- assert.equal(estimate('chair daily rainfall',ARCHETYPES[0],DEFAULT_CONTEXT).matches.includes('ai'),false);
+ assert.equal(estimate('chair daily rainfall',ARCHETYPES.find(a=>a.id==='ai-builders')!,DEFAULT_CONTEXT).matches.includes('ai'),false);
  const result=analyze(text,ARCHETYPES,DEFAULT_CONTEXT,{'ai-builders':{report:1}}).find(r=>r.archetype.id==='ai-builders')!;
  assert.ok(result.raw<0);assert.equal(result.predictions.report,1);
 });

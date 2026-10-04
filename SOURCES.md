@@ -26,7 +26,7 @@ Other filters are not modeled: subscription access, duplicate retrievals, self p
 
 ## HAI assumptions — not from X
 
-The eight archetypes and their keyword dictionaries are synthetic HAI scenarios. Custom deterministic profiles extract non-stopword tokens from a description, use a fixed `reader` behavior, and do not infer demographics.
+The nine archetypes and their keyword dictionaries are synthetic HAI scenarios. Custom deterministic profiles extract non-stopword tokens from a description, use a fixed `reader` behavior, and do not infer demographics.
 
 For an archetype, let `m` be the number of distinct matched dictionary terms. Text and terms are NFKC-normalized and lowercased; matching uses whole Unicode tokens (multiword terms require all words). Affinity is `1 - exp(-m / 3)`. The progress bar visualizes this lexical affinity and does **not** visualize a reach probability.
 
