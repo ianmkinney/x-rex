@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+test.beforeEach(async({context})=>{await context.addCookies([{name:'xrex_tour_v1',value:'done',url:'http://localhost:3000'}]);});
 test('public profile tab builds an editable, evidence-based prompt without API credentials',async({page,request},testInfo)=>{
  await page.goto('/');await page.getByRole('tab',{name:'Target a profile'}).click();
  await page.getByLabel('X profile URL or handle').fill('https://x.com/examplechef');

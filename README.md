@@ -37,7 +37,7 @@ Configure these encrypted environment variables in Vercel â†’ Project Settings â
 - `OPENROUTER_API_KEY`: OpenRouter API key for model generation.
 - `X_BEARER_TOKEN`: official X API bearer token for public profile imports.
 
-Placeholders beginning with `REPLACE_ME` are treated as unconfigured and return a friendly 503 without calling providers. Replace them with real values in each environment you use, then **redeploy**. Neither secret uses the `NEXT_PUBLIC_` prefix. Secrets are read only in server API routes; there are no credential fields, client credential headers, browser storage, or exported keys. Caller-supplied credential headers are ignored. The deployment owner's credentials back provider requests.
+Placeholders beginning with `REPLACE_ME` are treated as unconfigured and return a friendly 503 without calling providers. Replace them with real values in each environment you use, then **redeploy**. Neither secret uses the `NEXT_PUBLIC_` prefix. Secrets are read only in server API routes; there are no credential fields, client credential headers, credential storage in the browser, or exported keys. Caller-supplied credential headers are ignored. The deployment owner's credentials back provider requests.
 
 For local development, copy `.env.example` to ignored `.env.local` and replace the placeholders. Never commit real credentials.
 
@@ -76,3 +76,11 @@ Generation favors short, natural sentences and varied rhythm, with conversationa
 Each option has an editable post-only box, Copy post, and Post on X. Copy and X's composer receive only the edited text. Reasoning appears in a separate box below; edits mark it as referring to the original draft. `twitter-text` checks X's weighted length (including URLs, emoji, and CJK); invalid standard-length posts cannot open the composer until edited. Posting is completed by the user in X, never automatically.
 
 `GET /api/models` reads OpenRouter's public catalog without credentials and caches it for one hour. A catalog outage retains the default Sonnet option and provides Retry. Model availability and output quality vary by provider and account.
+
+## Your voice, onboarding, and X-Rex help
+
+The **Your writing style** panel at the top accepts a public X profile or pasted examples. Import reuses the server-only X API route and loads up to five recent original posts for review. Save applies examples and optional style preferences to both audience and reader-profile briefs. Writing samples are labeled as data, not instructions; they guide style without changing scoring or training model weights. Saved data uses the versioned `xrex:voice:v1` localStorage key on this browser. Remove voice deletes it. If browser storage is unavailable, voice can still be used for the session. Copied prompts include the saved examples; generation sends them to OpenRouter.
+
+A five-step first-visit tour has Back, Next, direct step navigation, and Skip. Skip/completion sets `xrex_tour_v1=done`, a one-year first-party SameSite=Lax cookie (Secure on HTTPS), with no profile content. **Quick tour** replays it anytime.
+
+**Talk to X-Rex** opens a session-only chat using the selected model and the existing server credential. The help endpoint accepts bounded user/assistant history and minimal UI context (tab, voice configured); it does not automatically receive writing samples, imported profiles, or post text. Responses contain a short explanation and allowlisted navigation suggestions. Navigation happens only when the user clicks a button; chat cannot publish, change configuration, or call arbitrary tools. Welcome shortcuts work even before AI is configured.

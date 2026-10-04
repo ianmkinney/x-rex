@@ -2,6 +2,11 @@
 import {useRef,useState} from 'react';
 import Image from 'next/image';
 import ProfileTab from './components/ProfileTab';
+import WriterProfile from './components/WriterProfile';
+import Walkthrough from './components/Walkthrough';
+import RexAssistant from './components/RexAssistant';
+import {EMPTY_VOICE,type WriterVoice} from '@/lib/voice';
+import type {HelpAction} from '@/lib/help';
 import ModelPicker from './components/ModelPicker';
 import DraftResults from './components/DraftResults';
 import {DEFAULT_MODEL,type DraftResponse} from '@/lib/drafts';
@@ -10,6 +15,10 @@ import {ARCHETYPES,DEFAULT_CONTEXT,ENGINE_VERSION,LABELS,SOURCE_SHA,SOURCE_URL,W
 const SAMPLE='One small AI workflow that saves me time: ask Claude to turn meeting notes into an action list, then use an automation to create tasks. Start with one repetitive step, not your entire business. What would you automate first?';
 type Tab='analyze'|'create'|'profile'|'method';
 export default function Page(){
+ const [voice,setVoice]=useState<WriterVoice>(EMPTY_VOICE);
+ const [voiceRequest,setVoiceRequest]=useState(0);
+ const [tourRequest,setTourRequest]=useState(0);
+ function helpAction(action:HelpAction){if(action==='voice'){setVoiceRequest(n=>n+1);}else if(action==='tour'){setTourRequest(n=>n+1);}else{setTab(action);window.scrollTo({top:0,behavior:'smooth'});}}
  const [tab,setTab]=useState<Tab>('analyze');
  const [text,setText]=useState(SAMPLE);
  const [context,setContext]=useState<Context>(DEFAULT_CONTEXT);
@@ -31,7 +40,7 @@ export default function Page(){
  const [fileName,setFileName]=useState('');
  const file=useRef<HTMLInputElement>(null);
  const chosen=archetypes.filter(a=>selected.includes(a.id));
- const prompt=buildPrompt(chosen,topic,tone);
+ const prompt=buildPrompt(chosen,topic,tone,voice);
  const currentInput=JSON.stringify({text,context,archetypes,overrides});
  const dirty=currentInput!==lastInput;
  const top=results[0];
@@ -55,6 +64,8 @@ export default function Page(){
  function createCustom(){try{addArchetype(customArchetype(customText));}catch(e){setError((e as Error).message);}}
  function toggle(id:string){setSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);setDraft(null);}
  return <div className="app-shell">
+  <Walkthrough request={tourRequest} onVoice={()=>setVoiceRequest(n=>n+1)}/>
+  <RexAssistant model={selectedModel} tab={tab} hasVoice={!!voice.examples.trim()} onAction={helpAction}/>
   <aside className="sidebar">
    <a className="brand" href="/" aria-label="X-Rex home"><Image src="/x-rex.webp" alt="X-headed T-Rex mascot" width={54} height={54} priority/><span className="brand-wordmark">X-REX</span><span className="brand-tagline"><span className="brand-purpose">X post optimization</span><span className="brand-source">Powered by X’s open-source<br/> For You algorithm</span></span></a>
    <div className="workspace-label">AUDIENCE INTELLIGENCE</div>
@@ -68,10 +79,11 @@ export default function Page(){
    <div className="sidebar-bottom"><a href={SOURCE_URL} target="_blank" rel="noreferrer"><Code2 size={16}/>Based on X’s open source<ArrowUpRight size={15}/></a><div className="company"><span className="company-avatar">H</span><div>Made by HAI<small>Human-centered intelligence</small></div></div></div>
   </aside>
   <main>
-   <header className="topbar"><div className="breadcrumb">X-Rex lab<ChevronRight size={14}/><strong>{tab==='analyze'?'Post analysis':tab==='create'?'Audience studio':tab==='profile'?'Profile targeting':'Methodology'}</strong></div><div className="topbar-right"><span className="engine-chip"><ShieldCheck size={14}/>Deterministic engine</span><span className="top-avatar rex-avatar"><Image src="/x-rex.webp" alt="" width={27} height={27}/></span></div></header>
+   <header className="topbar"><div className="breadcrumb">X-Rex lab<ChevronRight size={14}/><strong>{tab==='analyze'?'Post analysis':tab==='create'?'Audience studio':tab==='profile'?'Profile targeting':'Methodology'}</strong></div><div className="topbar-right"><button className="text-button quick-tour" onClick={()=>setTourRequest(n=>n+1)}>Quick tour</button><span className="engine-chip"><ShieldCheck size={14}/>Deterministic engine</span><span className="top-avatar rex-avatar"><Image src="/x-rex.webp" alt="" width={27} height={27}/></span></div></header>
    <div className="main-content">
     {error&&!custom&&!inspected&&<div className="alert error" role="alert"><Info size={18}/><span>{error}</span><button aria-label="Dismiss error" onClick={()=>setError('')}><Close size={16}/></button></div>}
     {notice&&<div className="alert notice" role="status"><CheckCircle2 size={17}/><span>{notice}</span><button aria-label="Dismiss notice" onClick={()=>setNotice('')}><Close size={16}/></button></div>}
+    <WriterProfile onChange={setVoice} request={voiceRequest} disabled={!!busy}/>
     <div className="page-heading"><div><div className="eyebrow">{tab==='analyze'?'POST → PEOPLE':tab==='create'?'PEOPLE → POST':tab==='profile'?'PROFILE → POST':'OPEN CODE. CLEAR ASSUMPTIONS.'}</div><h1>{tab==='analyze'?'Find your audience.':tab==='create'?'Start with your people.':tab==='profile'?'Write for their interests.':'See what’s behind the score.'}</h1><p>{tab==='analyze'?'See which archetypes your post fits—and the signals behind the match.':tab==='create'?'Choose who you want to reach. Build a brief worth writing from.':tab==='profile'?'Turn a public profile into an evidence-based post brief.':'Published ranking arithmetic, with every simulation assumption in view.'}</p></div><span className="version-pill">LAB / 01</span></div>
     {tab!=='method'&&<ModelPicker value={selectedModel} onChange={setSelectedModel} disabled={!!busy}/>}
     {tab!=='method'&&<div className="mode-tabs" role="tablist" aria-label="Workflow"><button role="tab" aria-selected={tab==='analyze'} className={tab==='analyze'?'selected':''} onClick={()=>setTab('analyze')}><ScanText size={17}/>Analyze a post</button><button role="tab" aria-selected={tab==='create'} className={tab==='create'?'selected':''} onClick={()=>setTab('create')}><Users size={17}/>Build for an audience</button><button role="tab" aria-selected={tab==='profile'} className={tab==='profile'?'selected':''} onClick={()=>setTab('profile')}><Users size={17}/>Target a profile</button></div>}
@@ -102,7 +114,7 @@ export default function Page(){
     {tab==='create'&&<div className="studio-grid"><section><div className="section-title"><span className="step">01</span><h2>Choose your audience</h2><span className="tag">{selected.length} SELECTED</span></div><p className="section-description">Combine interests, or describe someone new.</p><div className="archetype-grid">{archetypes.map(a=><button key={a.id} className={`archetype-card ${selected.includes(a.id)?'chosen':''}`} onClick={()=>toggle(a.id)} aria-pressed={selected.includes(a.id)}><div className="archetype-top"><span className="audience-icon" style={{background:`${a.color}18`,color:a.color}}>{a.name.slice(0,2).toUpperCase()}</span><span className="check-box">{selected.includes(a.id)&&<Check size={14}/>}</span></div><h3>{a.name}</h3><p>{a.description}</p><div className="interest-tags">{a.interests.slice(0,2).map(t=><span key={t}>{t}</span>)}</div></button>)}</div><button className="add-audience" onClick={()=>setCustom(true)}><Plus size={17}/>Describe a custom archetype</button></section>
      <section className="card brief-card"><div className="section-title"><span className="step">02</span><h2>Your generation brief</h2><span className="tag">LIVE</span></div><label className="field">What’s the post about?<textarea value={topic} onChange={e=>{setTopic(e.target.value);setDraft(null);}} maxLength={2000} rows={3} placeholder="An idea, a lesson, or something worth sharing…"/></label><label className="field">Voice<select value={tone} onChange={e=>{setTone(e.target.value);setDraft(null);}}><option>Clear and conversational</option><option>Practical and educational</option><option>Thoughtful and analytical</option><option>Playful and concise</option></select></label><p className="hint">Includes algorithm marker names, published weights, writing guidance, and a request for a “markers used” explanation with each draft.</p><div className="brief-preview"><div className="mini-label"><FileText size={15}/>LLM-READY PROMPT</div><textarea aria-label="Generated prompt" readOnly value={chosen.length?prompt:'Select at least one archetype to build a prompt.'}/></div><button className="primary" onClick={()=>void copy(prompt)} disabled={!chosen.length||!topic.trim()}><Copy size={17}/>Copy generation prompt</button><div className="or-divider"><span>OR TRY IT HERE</span></div><button className="secondary" disabled={!chosen.length||!topic.trim()||!!busy} onClick={async()=>{const data=await ai('draft',{prompt});if(data)setDraft(data);}}>{busy==='draft'?<LoaderCircle className="spin" size={17}/>:<Sparkles size={17}/>}Generate posts</button><p className="hint centered">Uses your selected OpenRouter model. Drafts can vary.</p>{draft&&<DraftResults result={draft}/>}</section>
     </div>}
-    <div hidden={tab!=='profile'}><ProfileTab generate={async(prompt)=>ai('draft',{prompt})}/></div>
+    <div hidden={tab!=='profile'}><ProfileTab voice={voice} generate={async(prompt)=>ai('draft',{prompt})}/></div>
     {tab==='method'&&<div className="method-content"><div className="method-banner"><ShieldCheck size={30}/><div><h2>Same input. Same assumptions. Same score.</h2><p>The deterministic engine runs locally. Sonnet is optional and never assigns your audience scores.</p></div></div><div className="method-grid"><section className="card"><div className="eyebrow">FROM X’S SOURCE</div><h2>What we reproduce</h2><ul><li>25 published value-model weights at a pinned revision.</li><li>Weighted prediction sum and negative-score offset.</li><li>The +15 reply weight for eligible mutual-follow original posts.</li><li>Selected eligibility checks: age, seen posts, blocked authors, and out-of-network replies/reposts.</li></ul><a href={`${SOURCE_URL}/xai-value-model/scoring.rs`} target="_blank" rel="noreferrer" className="text-button">Inspect upstream scoring<ArrowUpRight size={15}/></a></section><section className="card"><div className="eyebrow">FROM HAI’S SIMULATOR</div><h2>What we assume</h2><ul><li>Archetypes are invented interest profiles, not official X segments.</li><li>Literal keyword overlap estimates viewer actions with fixed, inspectable formulas.</li><li>Bars show lexical overlap strength; scores are not reach probabilities.</li><li>No private histories, model checkpoints, retrieval, author-diversity rescaling, exploration, or VMRanker reranking.</li></ul></section></div><section className="card"><h2>The arithmetic</h2><div className="formula">value score = Σ (prediction × published weight)</div><p className="hint">Weights multiply the individual viewer’s predicted actions, never raw likes or reports. Dwell-time heads use continuous values. Unavailable video quality and quoted-post predictions default to zero. Click any audience result to inspect or override all 25 inputs.</p><div className="weights-table"><table><thead><tr><th>Signal</th><th>Published weight</th><th>Input unit</th></tr></thead><tbody>{(Object.entries(WEIGHTS) as [Head,number][]).map(([head,w])=><tr key={head}><td>{LABELS[head]}</td><td className={w<0?'negative':'positive'}>{w>0?'+':''}{w}</td><td>{head.endsWith('_time')?'Continuous seconds':'Probability 0–1'}</td></tr>)}</tbody></table></div></section><div className="source-footer"><a href={SOURCE_URL} target="_blank" rel="noreferrer">xai-org/x-algorithm · {SOURCE_SHA.slice(0,7)}</a><span>Config synced Oct 2, 2026 · {ENGINE_VERSION}</span></div></div>}
     <footer className="page-footer"><span>X-REX <span className="footer-slash">/</span> A clearer view of your audience.</span><span>Independent tool · Not affiliated with X</span></footer>
    </div>

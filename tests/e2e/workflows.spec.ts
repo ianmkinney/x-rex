@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {draftFixture} from './draft-fixture';
+test.beforeEach(async({context})=>{await context.addCookies([{name:'xrex_tour_v1',value:'done',url:'http://localhost:3000'}]);});
 test('analysis, score overrides, eligibility, custom audiences, and reverse brief',async({page},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');

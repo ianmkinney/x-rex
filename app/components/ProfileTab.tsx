@@ -1,17 +1,18 @@
 'use client';
 import {useState} from 'react';
 import DraftResults from './DraftResults';
+import type {WriterVoice} from '@/lib/voice';
 import type {DraftResponse} from '@/lib/drafts';
 import {Copy,ExternalLink,LoaderCircle,Search,Sparkles,UserRound,Info} from 'lucide-react';
 import {parseHandle,profileInterests,profilePrompt,type PublicProfile} from '@/lib/profile';
-type Props={generate:(prompt:string)=>Promise<DraftResponse|null>};
-export default function ProfileTab({generate}:Props){
+type Props={voice:WriterVoice;generate:(prompt:string)=>Promise<DraftResponse|null>};
+export default function ProfileTab({generate,voice}:Props){
  const [input,setInput]=useState('');const [profile,setProfile]=useState<PublicProfile|null>(null);
  const [bio,setBio]=useState('');const [posts,setPosts]=useState('');const [interests,setInterests]=useState('');
  const [topic,setTopic]=useState('A useful, practical insight related to the selected interests');const [tone,setTone]=useState('Clear and conversational');const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');const [notice,setNotice]=useState('');const [draft,setDraft]=useState<DraftResponse|null>(null);
  const selected=[...new Set(interests.split(',').map(x=>x.trim()).filter(Boolean))].slice(0,15);
- const prompt=profile&&selected.length&&topic.trim()?profilePrompt(profile,selected,topic,tone):'';
+ const prompt=profile&&selected.length&&topic.trim()?profilePrompt(profile,selected,topic,tone,voice):'';
  function accept(p:PublicProfile){setProfile(p);setBio(p.bio);setPosts(p.posts.map(x=>x.text).join('\n\n'));setInterests(profileInterests(p).join(', '));setDraft(null);setNotice(p.warning||'Evidence loaded. Review the suggested interests before copying your prompt.');}
  async function load(){setError('');setNotice('');setBusy(true);setProfile(null);setDraft(null);try{parseHandle(input);const response=await fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile:input})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not import this profile.');accept(result.profile);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  function manual(){setError('');try{const username=parseHandle(input);if(!bio.trim()&&!posts.trim())throw new Error('Paste the public bio or at least one post excerpt.');accept({username,name:username,bio:bio.slice(0,1000),posts:posts.split(/\n\s*\n/).map(p=>p.trim()).filter(Boolean).slice(0,10).map((text,i)=>({id:`pasted-${i}`,text:text.slice(0,1200)})),source:'pasted'});}catch(e){setError((e as Error).message);}}

@@ -1,3 +1,4 @@
+import {voicePrompt,type WriterVoice} from './voice';
 /**
  * X-Rex v1. The public arithmetic is distinct from the HAI lexical surrogate.
  * No trained Phoenix checkpoint, private viewer data, or retrieval pool is used.
@@ -125,7 +126,7 @@ The extra +15 reply weight applies only to eligible mutual-follow original posts
 AUDIENCE MATCHING — X-REX ASSUMPTIONS, NOT X MARKERS
 Use the selected audience's interests and vocabulary only where they fit the topic naturally. X-Rex estimates affinity from unique literal term matches: 1 - exp(-match count / 3). Its surrogate also uses question marks, practical-guide words, links, text length, media, and the selected behavior preset. These are simulator heuristics, not verified Phoenix features. Do not keyword-stuff, pad text, add unnecessary links, or insert questions to game those heuristics. The profile flow uses editable public-interest hypotheses, not private feed data.`;
 }
-export function buildPrompt(archetypes:Archetype[],topic:string,tone:string):string {
+export function buildPrompt(archetypes:Archetype[],topic:string,tone:string,voice?:WriterVoice):string {
  return `Write 3 distinct original X posts, each no more than 280 characters, about: ${topic.trim()||'[your topic]'}.
 
 ${algorithmMarkers()}
@@ -142,6 +143,8 @@ Post: the ready-to-publish text, no more than 280 characters. Never put marker n
 Audience fit: name the selected interest and explain the concrete relevance.
 Markers used: identify 2–4 relevant heads by exact name and weight from above; quote the phrase or structure in this option that supports each and explain the intended viewer action. Mark each relationship as a writing hypothesis, not a predicted outcome. Do not list signals the post does not meaningfully support.
 Negative-feedback check: name the relevant negative head(s) and explain how the wording avoids the specific risk.
+${voicePrompt(voice)}
+
 Keep the rationale outside the 280-character post. No promises about impressions, ranking, virality, or For You placement.
 
 PROVENANCE
