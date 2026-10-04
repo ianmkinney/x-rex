@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from 'next/server';
 import {parseHandle,type PublicProfile} from '@/lib/profile';
 export const maxDuration=30;
 const reply=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});
-function apiError(status:number){return status===401?'X rejected this bearer token.':status===403?'Your X API token does not have access to this endpoint.':status===404?'This public profile could not be found.':status===429?'X is rate limiting requests. Try again later.':status===402?'Your X API account needs credits or endpoint access.':'X could not return the public data. Try again or paste it manually.';}
+function apiError(status:number){return status===401?'X rejected the server credential. Please contact the site administrator.':status===403?'The server’s X API account does not have access to this endpoint.':status===404?'This public profile could not be found.':status===429?'X is rate limiting requests. Try again later.':status===402?'The server’s X API account needs credits or endpoint access.':'X could not return the public data. Try again or paste it manually.';}
 export async function POST(request:NextRequest){
  try{
   const raw=await request.text();if(raw.length>1000)return reply({error:'Profile input is too long.'},413);
@@ -10,8 +10,8 @@ export async function POST(request:NextRequest){
   const value=(body as {profile?:unknown})?.profile;
   if(typeof value!=='string')return reply({error:'Enter a profile URL or handle.'},400);
   let username:string;try{username=parseHandle(value);}catch(e){return reply({error:(e as Error).message},400);}
-  const token=request.headers.get('x-api-bearer-token')?.trim();
-  if(!token||token.length<20||token.length>2048||/[\r\n]/.test(token))return reply({error:'Add an X API bearer token to import a profile, or paste the public bio and posts below.'},401);
+  const token=process.env.X_BEARER_TOKEN?.trim();
+  if(!token||token.startsWith('REPLACE_ME')||token.length<20||token.length>2048||/[\r\n]/.test(token))return reply({error:'Profile import is not configured on the server yet. You can paste the public bio and posts below.'},503);
   // Fixed official host and validated path components: never fetch arbitrary user URLs.
   const get=(path:string)=>fetch(`https://api.x.com/2/${path}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(12000)});
   const response=await get(`users/by/username/${username}?user.fields=description,protected`);

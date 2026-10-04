@@ -30,27 +30,28 @@ npm run start
 - **Build for an audience:** select several archetypes or create one from a description. Copy a deterministic generation brief or ask Sonnet to draft posts.
 - **Export:** download a JSON report with inputs, archetypes, overrides, results, engine version, and pinned upstream revision. API keys are excluded.
 
-## AI configuration
+## Server credentials
 
-In **AI settings**, enter an **OpenRouter** API key. OpenAI API keys cannot directly call Anthropic Sonnet. The implementation interprets the requested “open-air” provider as OpenRouter.
+Configure these encrypted environment variables in Vercel → Project Settings → Environment Variables:
 
-The default model is OpenRouter’s `~anthropic/claude-sonnet-latest` alias. Optional server configuration:
+- `OPENROUTER_API_KEY`: OpenRouter API key for latest Claude Sonnet.
+- `X_BEARER_TOKEN`: official X API bearer token for public profile imports.
 
-```dotenv
-OPENROUTER_MODEL=~anthropic/claude-sonnet-latest
-```
+Placeholders beginning with `REPLACE_ME` are treated as unconfigured and return a friendly 503 without calling providers. Replace them with real values in each environment you use, then **redeploy**. Neither secret uses the `NEXT_PUBLIC_` prefix. Secrets are read only in server API routes; there are no credential fields, client credential headers, browser storage, or exported keys. Caller-supplied credential headers are ignored. The deployment owner's credentials back provider requests.
 
-Keys are BYOK, kept in React memory for the current tab, passed to the same-origin server only for an explicitly requested AI operation, and forwarded only to `https://openrouter.ai/api/v1/chat/completions`. Keys are never stored in browser storage, logs, exported reports, or the repository. Refreshing the page clears the key, drafts, and custom profiles. There is no publicly spendable shared server credential. Optional AI actions are not deterministic; accepted text and profiles become fixed inputs to deterministic scoring. The response’s resolved model is displayed with generated drafts.
+For local development, copy `.env.example` to ignored `.env.local` and replace the placeholders. Never commit real credentials.
+
+The optional `OPENROUTER_MODEL` override defaults to `~anthropic/claude-sonnet-latest`. OpenAI API keys cannot directly call Anthropic Sonnet. Optional AI operations are not deterministic; accepted text and profiles become fixed inputs to deterministic scoring.
 
 ## Deploy to Vercel
 
-Connect `ianmkinney/x-rex` as a Next.js project, with the repository root as the root directory. No secret environment variables are required; optional model override only. Production branch: `main`.
+Connect `ianmkinney/x-rex` as a Next.js project, with the repository root as the root directory. Set the two server secrets above to enable AI and profile import; local analysis and prompt generation work while placeholders remain. Production branch: `main`.
 
 The project uses the user-selected personal repository `ianmkinney/x-rex`. The original private organization repository was replaced at the user’s request before deployment.
 
 ## Verification
 
-`npm test` verifies hand-calculated score parity, negative offsets, conditional weights, eligibility boundaries, reproducibility, custom archetypes, and override behavior. `npm run test:e2e` verifies the main desktop/mobile workflows and API validation (install Chromium with `npx playwright install chromium` first). AI provider UI handling is tested with marked mock responses; a billable live provider request requires a user-supplied key.
+`npm test` verifies hand-calculated score parity, negative offsets, conditional weights, eligibility boundaries, reproducibility, custom archetypes, and override behavior. `npm run test:e2e` verifies the main desktop/mobile workflows and API validation (install Chromium with `npx playwright install chromium` first). AI provider UI handling is tested with marked mock responses; a billable live provider request requires configured server credentials.
 
 To check the 25 weights against the upstream clone:
 
@@ -64,6 +65,6 @@ Next.js App Router, React, TypeScript, plain CSS, Lucide icons, Zod, and a serve
 
 ## Target a public profile
 
-The separate **Target a profile** tab accepts an X handle or profile URL. Automatic import uses the official X API (`GET /2/users/by/username/:username` and `GET /2/users/:id/tweets`) with a user-provided **X API bearer token** entered in that tab. It imports the public bio and up to 10 original posts, with source links, a retrieval timestamp, and partial-fetch warnings. Protected profiles are rejected. Tokens remain in tab memory, are never exported or logged, and are forwarded only to `api.x.com`. X API endpoint access/credits may be needed.
+The separate **Target a profile** tab accepts an X handle or profile URL. Automatic import uses the official X API (`GET /2/users/by/username/:username` and `GET /2/users/:id/tweets`) with the server-only `X_BEARER_TOKEN` environment variable. It imports the public bio and up to 10 original posts, with source links, a retrieval timestamp, and partial-fetch warnings. Protected profiles are rejected. The token is never sent to the browser, exported, or logged; the server forwards it only to `api.x.com`. X API endpoint access/credits may be needed.
 
-Without X API access, paste a public bio and post excerpts. Pasted evidence is explicitly unverified. The app suggests literal interest matches, lets the user edit them, and generates a deterministic brief containing the evidence and source limitations. Optional Sonnet drafting uses the existing OpenRouter key. This does not access or predict a person's private For You feed; no placement is guaranteed. Profile evidence is sent to OpenRouter only when drafting is explicitly requested. Tests mock external profile responses; no live authenticated X fetch was performed during development.
+Without X API access, paste a public bio and post excerpts. Pasted evidence is explicitly unverified. The app suggests literal interest matches, lets the user edit them, and generates a deterministic brief containing the evidence and source limitations. Optional Sonnet drafting uses the server-only `OPENROUTER_API_KEY`. This does not access or predict a person's private For You feed; no placement is guaranteed. Profile evidence is sent to OpenRouter only when drafting is explicitly requested. Tests mock external profile responses; no live authenticated X fetch was performed during development.

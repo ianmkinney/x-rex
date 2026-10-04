@@ -28,7 +28,7 @@ test('analysis, score overrides, eligibility, custom audiences, and reverse brie
  expect(errors).toEqual([]);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
-test('file import, API validation, and key setup',async({page,request},testInfo)=>{
+test('file import, API validation, and server credential UI',async({page,request},testInfo)=>{
  await page.goto('/');
  await page.locator('input[type=file]').setInputFiles({name:'post.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({text:'Tennis players and soccer fans have a match today.'}))});
  await expect(page.getByLabel('Post text')).toHaveValue(/Tennis players/);
@@ -36,14 +36,11 @@ test('file import, API validation, and key setup',async({page,request},testInfo)
  await expect(page.locator('.audience-row').first()).toContainText('Sports fans');
  await page.screenshot({path:`test-results/${testInfo.project.name}-analysis.png`,fullPage:true});
  const noKey=await request.post('/api/ai',{data:{action:'draft',prompt:'Write a helpful post about AI.'}});
- expect(noKey.status()).toBe(401);expect((await noKey.json()).error).toContain('OpenRouter');
+ expect(noKey.status()).toBe(503);expect((await noKey.json()).error).toContain('server');
  const invalid=await request.post('/api/ai',{data:{action:'not-allowed'}});expect(invalid.status()).toBe(400);
  await page.getByRole('tab',{name:'Build for an audience'}).click();
- await page.getByRole('button',{name:'Generate with Sonnet'}).click();
- await expect(page.getByRole('dialog',{name:'Connect your writing assistant'})).toBeVisible();
- await page.getByLabel('OpenRouter API key').fill('sk-or-test-placeholder-not-a-real-key');
- await page.getByRole('button',{name:'Done',exact:true}).click();
- // Deliberate mock: proves client wiring without spending a real provider credential.
+ await expect(page.locator('input[type=password]')).toHaveCount(0);
+ // Deliberate mock: proves client wiring without spending a configured provider credential.
  await page.route('**/api/ai',route=>route.fulfill({json:{text:'1. MOCK TEST DRAFT',model:'test-sonnet-model'}}));
  await page.getByRole('button',{name:'Generate with Sonnet'}).click();
  await expect(page.getByText('1. MOCK TEST DRAFT', {exact:true})).toBeVisible();

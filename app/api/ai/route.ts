@@ -17,9 +17,9 @@ export async function POST(request:NextRequest) {
   try {parsed=JSON.parse(raw);} catch {return NextResponse.json({error:'Invalid JSON request.'},{status:400});}
   const validated=input.safeParse(parsed);
   if(!validated.success) return NextResponse.json({error:'Invalid input. Check the text length or image format.'},{status:400});
-  // BYOK only. No shared, publicly callable billing credential and no key persistence.
-  const key=request.headers.get('x-openrouter-key')?.trim();
-  if(!key||key.length<16||key.length>512||!/^[-A-Za-z0-9_]+$/.test(key)) return NextResponse.json({error:'Add your OpenRouter API key in AI settings. Deterministic analysis and prompts work without a key.'},{status:401});
+  // Credentials are server-only. Never read them from client headers or request bodies.
+  const key=process.env.OPENROUTER_API_KEY?.trim();
+  if(!key||key.startsWith('REPLACE_ME')||key.length<16||key.length>512||!/^[-A-Za-z0-9_]+$/.test(key)) return NextResponse.json({error:'AI is not configured on the server yet. Analysis and prompt generation are still available.'},{status:503});
   const data=validated.data;
   const system=data.action==='archetype'
    ? 'Convert the user description to an interest-based audience scenario. Do not infer sensitive demographic traits. Return ONLY JSON with name (max 42 chars), description (max 600 chars), terms (3-35 lowercase topic keywords or short phrases), interests (1-5 readable topic names), behavior (builder, reader, conversational, or curator). This is a writing tool, not X audience data.'
@@ -34,7 +34,7 @@ export async function POST(request:NextRequest) {
   });
   if(!upstream.ok) {
    const status=upstream.status;
-   const error=status===401?'OpenRouter rejected this API key.':status===402?'Your OpenRouter account needs credits.':status===429?'OpenRouter is rate limiting requests. Please try again shortly.':'The Sonnet provider could not complete the request. Please try again.';
+   const error=status===401?'The AI provider rejected the server credential. Please contact the site administrator.':status===402?'AI service credits are unavailable. Please contact the site administrator.':status===429?'OpenRouter is rate limiting requests. Please try again shortly.':'The Sonnet provider could not complete the request. Please try again.';
    return NextResponse.json({error},{status:status>=400&&status<500?status:502});
   }
   const response=await upstream.json();

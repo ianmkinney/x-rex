@@ -14,7 +14,7 @@ test('public profile tab builds an editable, evidence-based prompt without API c
  await page.getByRole('tab',{name:'Target a profile'}).click();
  await expect(page.getByLabel('Your post topic')).toHaveValue('A daily food waste checklist');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- const missing=await request.post('/api/profile',{data:{profile:'examplechef'}});expect(missing.status()).toBe(401);
+ const missing=await request.post('/api/profile',{data:{profile:'examplechef'}});expect(missing.status()).toBe(503);
  const invalid=await request.post('/api/profile',{data:{profile:'https://evil.test/chef'}});expect(invalid.status()).toBe(400);
  // Explicit mock verifies import UI provenance; it is not a live X API call.
  await page.route('**/api/profile',r=>r.fulfill({json:{profile:{username:'examplechef',name:'Example chef',bio:'Restaurant owner',posts:[{id:'123',text:'Menu planning for a restaurant'}],source:'x-api',fetchedAt:'2026-10-04T16:00:00Z'}}}));
