@@ -61,3 +61,9 @@ python scripts/verify-upstream.py /path/to/x-algorithm
 ## Stack
 
 Next.js App Router, React, TypeScript, plain CSS, Lucide icons, Zod, and a server-side OpenRouter fetch adapter. No database, analytics, or user tracking. Apache-2.0; see LICENSE and NOTICE.
+
+## Target a public profile
+
+The separate **Target a profile** tab accepts an X handle or profile URL. Automatic import uses the official X API (`GET /2/users/by/username/:username` and `GET /2/users/:id/tweets`) with a user-provided **X API bearer token** entered in that tab. It imports the public bio and up to 10 original posts, with source links, a retrieval timestamp, and partial-fetch warnings. Protected profiles are rejected. Tokens remain in tab memory, are never exported or logged, and are forwarded only to `api.x.com`. X API endpoint access/credits may be needed.
+
+Without X API access, paste a public bio and post excerpts. Pasted evidence is explicitly unverified. The app suggests literal interest matches, lets the user edit them, and generates a deterministic brief containing the evidence and source limitations. Optional Sonnet drafting uses the existing OpenRouter key. This does not access or predict a person's private For You feed; no placement is guaranteed. Profile evidence is sent to OpenRouter only when drafting is explicitly requested. Tests mock external profile responses; no live authenticated X fetch was performed during development.

@@ -12,7 +12,7 @@ test('analysis, score overrides, eligibility, custom audiences, and reverse brie
  await page.getByLabel('Report assumed input').fill('1');
  await page.getByRole('button',{name:'Apply assumptions'}).click();
  await expect(page.locator('.audience-row').first()).not.toContainText('Market watchers');
- await page.locator('summary').click();
+ await page.locator('.composer summary').click();
  await page.getByLabel('Age in hours').fill('49');
  await page.getByRole('button',{name:'Analyze audience fit'}).click();
  await expect(page.locator('.audience-row').first()).toContainText('Filtered');

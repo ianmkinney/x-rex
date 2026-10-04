@@ -50,3 +50,7 @@ Phoenix inference/training, model checkpoint acquisition, viewer-history retriev
 ## AI boundary
 
 Prompt templates and deterministic custom profiles are generated locally. Optional Sonnet generates text, proposes archetypes, or transcribes screenshots. These steps can vary across requests, providers, and model updates. The latest alias is `~anthropic/claude-sonnet-latest` (https://openrouter.ai/~anthropic/claude-sonnet-latest). Scoring never calls an LLM. An accepted AI profile/text plus fixed inputs yields reproducible engine results; an LLM response is not called deterministic.
+
+## Public-profile briefs
+
+`lib/profile.ts` validates handles and profile URLs, reuses the declared archetype dictionaries for literal topic suggestions, and embeds the supplied bio/post evidence in a deterministic prompt. The profile is an interest hypothesis, not a Phoenix viewer representation. Only public data is imported, via the official X API with a user-supplied bearer token. Unknown/protected status is rejected. Up to 10 original posts are requested; each excerpt is capped at 1,200 characters. Partial timeline failures are shown and never replaced with invented posts. User-pasted text is explicitly unverified and receives no fabricated post URLs. Profile text is untrusted data; the generation brief forbids following embedded instructions or inferring sensitive demographics/private activity.

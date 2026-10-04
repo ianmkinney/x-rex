@@ -1,12 +1,12 @@
 {
   "name": "x-rex",
   "version": "1.0.0",
-  "description": "X-Rex — deterministic X audience scenario lab",
+  "description": "X-Rex \u2014 deterministic X audience scenario lab",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
-    "test": "node --import tsx --test tests/engine.test.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   },
