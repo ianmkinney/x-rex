@@ -105,8 +105,30 @@ export function analyze(text:string, archetypes:Archetype[],context:Context,over
  }).sort((a,b)=>b.offset-a.offset||a.archetype.id.localeCompare(b.archetype.id,'en'));
 }
 export type Result=ReturnType<typeof analyze>[number];
+// Use the same weight constants as the score inspector to avoid prompt/scorer drift.
+export function algorithmMarkers():string {
+ const marker=(head:Head)=>`${head} (${WEIGHTS[head]>0?'+':''}${WEIGHTS[head]}${head.endsWith('_time')?' per predicted second':''})`;
+ return `ALGORITHM MARKERS → WRITING DECISIONS
+These are the published value-model heads used to guide this brief. The writing tactics below are X-Rex editorial hypotheses, not rules published by X or measured lifts. Prioritize relevance and usefulness; a larger coefficient alone does not make a tactic better.
+- REFERENCE VALUE: ${marker('share_via_copy_link')}; ${marker('share_via_dm')}; ${marker('share')}. Give a self-contained tip, checklist, or concrete takeaway that someone could usefully send to a colleague. Do not ask for shares.
+- SUBSTANTIVE CONVERSATION: ${marker('reply')}; ${marker('quote')}. Offer a specific tradeoff, reasoned insight, or natural question that supports an informed response. Do not manufacture controversy or force a question.
+- REASON TO FOLLOW: ${marker('follow_author')}. Deliver credible, topic-specific expertise that suggests future posts could be useful. Do not invent credentials or ask for follows.
+- READING VALUE: ${marker('dwell_time')}; ${marker('click_dwell_time')}; ${marker('dwell')}; ${marker('click')}. Put a clear, relevant opening before useful detail. Avoid padding or curiosity gaps. Only use a link when a real, relevant destination is supplied; never add a link just to chase a signal.
+- BASIC RESONANCE: ${marker('favorite')}; ${marker('retweet')}. Make the takeaway accurate, understandable, and relevant enough to endorse or repost.
+- NEGATIVE FEEDBACK: ${marker('not_interested')}; ${marker('mute_author')}; ${marker('block_author')}; ${marker('report')}; ${marker('not_dwelled')}. Stay on-topic, deliver the promised value, and avoid spam, misleading claims, harassment, repetition, and engagement bait. These tactics do not establish a measurable reduction in negative feedback.
+
+HOW THE MARKERS ARE USED
+Raw value score = sum(predicted viewer action × weight). Action inputs are probabilities except dwell_time and click_dwell_time, which use predicted seconds. Weights are coefficients, not percentages or guaranteed score gains. A +20 copy-link weight does not mean 20% more reach. This brief has no actual viewer predictions, so do not invent probabilities, contributions, or an optimal score.
+Default writing scenario: a fresh, original text post for an out-of-network viewer. OONRetweetReplyFilter excludes out-of-network replies/reposts under the pinned default. AgeFilter excludes posts older than 48 hours; PreviouslySeenPostsFilter and AuthorSocialgraphFilter can exclude seen posts or blocked/muted authors. Wording cannot override these gates or ensure retrieval.
+The extra +15 reply weight applies only to eligible mutual-follow original posts; do not apply it to this scenario. post_unexplored contributes zero out-of-network. profile_click, vqv, and quoted_vqv have zero configured weight. Image, video, and quoted-post click/view actions are not writing targets for this text-only brief.
+
+AUDIENCE MATCHING — X-REX ASSUMPTIONS, NOT X MARKERS
+Use the selected audience's interests and vocabulary only where they fit the topic naturally. X-Rex estimates affinity from unique literal term matches: 1 - exp(-match count / 3). Its surrogate also uses question marks, practical-guide words, links, text length, media, and the selected behavior preset. These are simulator heuristics, not verified Phoenix features. Do not keyword-stuff, pad text, add unnecessary links, or insert questions to game those heuristics. The profile flow uses editable public-interest hypotheses, not private feed data.`;
+}
 export function buildPrompt(archetypes:Archetype[],topic:string,tone:string):string {
  return `Write 3 distinct original X posts, each no more than 280 characters, about: ${topic.trim()||'[your topic]'}.
+
+${algorithmMarkers()}
 
 AUDIENCE BRIEF
 ${archetypes.map(a=>`- ${a.name}: ${a.description}\n  Interests: ${a.interests.join(', ')}. Vocabulary where relevant: ${a.terms.join(', ')}.`).join('\n')}
@@ -114,12 +136,14 @@ ${archetypes.map(a=>`- ${a.name}: ${a.description}\n  Interests: ${a.interests.j
 VOICE
 ${tone}. Give a concrete, useful idea. Do not invent personal experiences, metrics, claims, or sources. Avoid keyword stuffing, engagement bait, and forced questions. Invite a substantive reply only when it fits naturally.
 
-RANKING CONTEXT — NOT A REACH GUARANTEE
-The published X value model weights viewer-specific predicted actions, not raw engagement counts. Examples: reply 5, quote 5, share via DM 5, copy link 20, like 0.5; negative feedback also contributes. These weights are not instructions to repeat keywords or a way to guarantee distribution. Write for genuine audience value. Out-of-network replies and reposts are filtered under the pinned default, so produce original posts.
-
 OUTPUT
-Return just 3 numbered post options and a brief audience rationale for each. Keep any caveats outside the post text. No promises about impressions, ranking, or virality.
+Return 3 numbered options. For each, separate:
+Post: the ready-to-publish text, no more than 280 characters. Never put marker names, weights, or analysis inside the post.
+Audience fit: name the selected interest and explain the concrete relevance.
+Markers used: identify 2–4 relevant heads by exact name and weight from above; quote the phrase or structure in this option that supports each and explain the intended viewer action. Mark each relationship as a writing hypothesis, not a predicted outcome. Do not list signals the post does not meaningfully support.
+Negative-feedback check: name the relevant negative head(s) and explain how the wording avoids the specific risk.
+Keep the rationale outside the 280-character post. No promises about impressions, ranking, virality, or For You placement.
 
 PROVENANCE
-Brief generated deterministically by ${ENGINE_VERSION}. X source: ${SOURCE_SHA}. Archetypes are HAI user-defined scenarios, not official X audience segments. LLM wording is a separate, non-deterministic step.`;
+Brief generated deterministically by ${ENGINE_VERSION}. X source: ${SOURCE_URL}/xai-value-model/scoring.rs (revision ${SOURCE_SHA}). Archetypes are HAI user-defined scenarios, not official X audience segments. LLM wording is a separate, non-deterministic step.`;
 }

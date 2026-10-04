@@ -1,4 +1,4 @@
-# X-Rex · X Audience Lab
+# X-Rex · X Post Optimization
 
 A polished, responsive audience scenario tool for HAI Consulting. Paste or upload an X post, compare interest archetypes, inspect the scoring inputs, or reverse the workflow to produce an LLM-ready post brief.
 

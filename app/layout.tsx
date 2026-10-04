@@ -8,7 +8,7 @@ import '@fontsource/manrope/600.css';
 import '@fontsource/manrope/700.css';
 import '@fontsource/manrope/800.css';
 import './globals.css';
-export const metadata: Metadata = { icons: { icon:'/x-rex.webp' }, title: 'X-Rex — X Audience Lab', description: 'Explore audience fit, inspect published X ranking weights, and build better post briefs. Reproducible simulations, transparent assumptions.' };
+export const metadata: Metadata = { icons: { icon:'/x-rex.webp' }, title: 'X-Rex — X Post Optimization', description: 'X post optimization using X’s open-source For You algorithm. Explore audience fit and build post briefs with published ranking weights and transparent simulation assumptions.' };
 export default function RootLayout({children}: Readonly<{children: React.ReactNode}>) {
   return <html lang="en"><body>{children}</body></html>;
 }

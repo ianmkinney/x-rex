@@ -45,3 +45,17 @@ test('custom descriptions yield reproducible profiles and reverse briefs',()=>{
  assert.match(prompt,/Composting basics/);assert.match(prompt,/not official X audience/);
  assert.throws(()=>customArchetype('the and of'));
 });
+
+test('generation briefs expose actionable source markers and require a per-post audit',()=>{
+ const prompt=buildPrompt([ARCHETYPES[0]],'Reduce food waste','Practical');
+ for(const head of ['share_via_copy_link','share_via_dm','reply','follow_author','not_interested','mute_author','report'] as const){
+  assert.ok(prompt.includes(`${head} (${WEIGHTS[head]>0?'+':''}${WEIGHTS[head]})`));
+ }
+ assert.match(prompt,/dwell_time \(\+0.004 per predicted second\)/);
+ assert.match(prompt,/Markers used: identify 2–4/);
+ assert.match(prompt,/editorial hypotheses, not rules published by X/);
+ assert.match(prompt,/X-REX ASSUMPTIONS, NOT X MARKERS/);
+ assert.match(prompt,/do not invent probabilities, contributions, or an optimal score/);
+ assert.match(prompt,/OONRetweetReplyFilter/);
+ assert.match(prompt,/Restaurant owners/);
+});
