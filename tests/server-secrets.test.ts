@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {NextRequest} from 'next/server';
 import {POST as ai} from '../app/api/ai/route';
 import {POST as profile} from '../app/api/profile/route';
-const posts=Array.from({length:3},()=>({text:'A tiny kitchen checklist beats another spreadsheet nobody opens.',audienceFit:'Relevant to restaurant operations.',markers:[{head:'reply',evidence:'checklist',rationale:'A writing hypothesis for useful discussion.'},{head:'share_via_copy_link',evidence:'tiny kitchen checklist',rationale:'A writing hypothesis for useful sharing.'}],negativeFeedback:'not_interested: stays on topic.'}));
+import {draftFixture} from './e2e/draft-fixture';
+const posts=draftFixture.posts;
 test('placeholder credentials do not call providers and client credentials cannot override them',async()=>{
  const oldAi=process.env.OPENROUTER_API_KEY,oldX=process.env.X_BEARER_TOKEN,oldFetch=globalThis.fetch;
  process.env.OPENROUTER_API_KEY='REPLACE_ME_OPENROUTER_API_KEY';process.env.X_BEARER_TOKEN='REPLACE_ME_X_BEARER_TOKEN';

@@ -46,17 +46,15 @@ test('custom descriptions yield reproducible profiles and reverse briefs',()=>{
  assert.throws(()=>customArchetype('the and of'));
 });
 
-test('generation briefs expose actionable source markers and require a per-post audit',()=>{
- const prompt=buildPrompt([ARCHETYPES[0]],'Reduce food waste','Practical');
- for(const head of ['share_via_copy_link','share_via_dm','reply','follow_author','not_interested','mute_author','report'] as const){
-  assert.ok(prompt.includes(`${head} (${WEIGHTS[head]>0?'+':''}${WEIGHTS[head]})`));
- }
- assert.match(prompt,/dwell_time \(\+0.004 per predicted second\)/);
- assert.match(prompt,/Markers used: identify 2–4/);
- assert.match(prompt,/editorial hypotheses, not rules published by X/);
- assert.match(prompt,/X-REX ASSUMPTIONS, NOT X MARKERS/);
- assert.match(prompt,/do not invent probabilities, contributions, or an optimal score/);
- assert.match(prompt,/OONRetweetReplyFilter/);
+test('generation briefs prioritize source-backed content and distinguish editorial assumptions',()=>{
+ const prompt=buildPrompt([ARCHETYPES[0]],'Reduce food waste','Practical',undefined,'expanded','Photo: labeled inventory bins.');
+ for(const marker of ['audience_relevance','topic_clarity','distinct_contribution','media_context','spam_risk'])assert.ok(prompt.includes(marker));
+ assert.match(prompt,/Content markers used: identify 2–4/);
+ assert.match(prompt,/Photo: labeled inventory bins/);
+ assert.match(prompt,/Editorial application \(hypothesis\)/);
+ assert.match(prompt,/WRITING QUALITY — EDITORIAL/);
+ assert.match(prompt,/do not reveal what a viewer reads/);
+ assert.ok(!prompt.includes('share_via_copy_link (+20)'));
  assert.match(prompt,/Restaurant owners/);
  assert.match(prompt,/Make the post enjoyable and effortless to read/);
  assert.match(prompt,/Do not force jokes/);

@@ -54,3 +54,12 @@ Prompt templates and deterministic custom profiles are generated locally. A user
 ## Public-profile briefs
 
 `lib/profile.ts` validates handles and profile URLs, reuses the declared archetype dictionaries for literal topic suggestions, and embeds the supplied bio/post evidence in a deterministic prompt. The profile is an interest hypothesis, not a Phoenix viewer representation. Only public data is imported, via the official X API with a server-only bearer token from `X_BEARER_TOKEN`. Unknown/protected status is rejected. Up to 10 original posts are requested; each excerpt is capped at 1,200 characters. Partial timeline failures are shown and never replaced with invented posts. User-pasted text is explicitly unverified and receives no fabricated post URLs. Profile text is untrusted data; the generation brief forbids following embedded instructions or inferring sensitive demographics/private activity.
+
+
+## Content-led generation (2026-10-04)
+Generation briefs now use pinned source mechanisms separately from the unchanged lexical score simulator:
+- `phoenix/reference/mm_encoder.py`: encoder instruction covers content/topic/sentiment/interest groups; renderer includes media, quote and card context.
+- `phoenix/README.md`: history-based retrieval and semantic IDs; public authored posts are not private engagement evidence.
+- `vm-ranker/dpp.rs`: candidate-pool diversity using embedding similarity, not a universal novelty bonus.
+- `grox/flows/ptos/state.py`: spam categories, not a reproducible classifier (prompts withheld).
+The UI supplies static source links; models cannot invent them. Draft markers require audience relevance and topic clarity, unique IDs, and verbatim evidence from their post. Readability, humor and emoji are explicitly editorial. Optional facts/media context is user-supplied, not independently fetched or verified. No semantic embedding inference or actual distribution prediction is performed. Weight arithmetic and lexical analysis remain unchanged and are not generation objectives.

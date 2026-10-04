@@ -13,9 +13,9 @@ test('profile prompts are grounded, reproducible, and distinguish pasted evidenc
  const a=profilePrompt(profile,interests,'Kitchen inventory','Practical');
  assert.equal(a,profilePrompt(profile,interests,'Kitchen inventory','Practical'));
  assert.match(a,/not independently verified/);assert.match(a,/does not expose the viewer/);assert.match(a,/Better menus/);
- assert.match(a,/ALGORITHM MARKERS → WRITING DECISIONS/);
- assert.match(a,/share_via_copy_link \(\+20\)/);
- assert.match(a,/Markers used: identify 2–4/);
+ assert.match(a,/CONTENT MARKERS → WRITING DECISIONS/);
+ assert.match(a,/topic_clarity/);
+ assert.match(a,/Content markers used: identify 2–4/);
  assert.equal(profileInterests({...profile,bio:'',posts:[]}).length,0);
  assert.throws(()=>profilePrompt(profile,[],'Topic','Practical'));
  assert.ok(!a.includes('/status/1')); // Never fabricate source links for pasted excerpts.

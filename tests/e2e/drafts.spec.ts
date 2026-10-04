@@ -11,9 +11,12 @@ test('model choice and separated posts support copy and X handoff in both workfl
  await page.getByLabel('Find a model').fill('Friendly');
  await page.getByRole('combobox',{name:'Writing model',exact:true}).selectOption('example/friendly-writer');
  await page.getByRole('tab',{name:'Build for an audience'}).click();
+ await page.getByRole('textbox',{name:'Facts, examples & media context (optional)',exact:true}).fill('Photo: a kitchen checklist beside the order station.');
  await page.getByRole('button',{name:'Generate posts',exact:true}).click();
  await expect(page.getByLabel('Post option 1',{exact:true})).toHaveValue(draftFixture.posts[0].text);
- await expect(page.getByRole('region',{name:'Reasoning for option 1'})).toContainText('share_via_copy_link');
+ await expect(page.getByRole('region',{name:'Reasoning for option 1'})).toContainText('Topic clarity');
+ expect(requests[0].prompt).toContain('Photo: a kitchen checklist');
+ await expect(page.getByRole('region',{name:'Reasoning for option 1'}).getByRole('link',{name:'View pinned source ↗'}).first()).toHaveAttribute('href',/b412112/);
  expect(requests[0].model).toBe('example/friendly-writer');
  const edited='Good food. Less kitchen chaos. One checklist. 🦖';
  await page.getByLabel('Post option 1',{exact:true}).fill(edited);
@@ -35,7 +38,7 @@ test('model choice and separated posts support copy and X handoff in both workfl
  await page.getByRole('button',{name:'Generate posts',exact:true}).click();
  await expect(page.getByLabel('Post option 1',{exact:true})).toHaveValue(draftFixture.posts[0].text);
  expect(requests[1].model).toBe('example/friendly-writer');
- await expect(page.getByRole('region',{name:'Reasoning for option 1'})).toContainText('not_interested');
+ await expect(page.getByRole('region',{name:'Reasoning for option 1'})).toContainText('Avoids engagement bait');
  expect(errors).toEqual([]);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
