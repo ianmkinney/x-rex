@@ -35,7 +35,7 @@ export async function POST(request:NextRequest) {
   const content=data.action==='help'?'':data.action==='transcribe'?[{type:'text',text:'Transcribe this post for user review.'},{type:'image_url',image_url:{url:data.image}}]:data.prompt;
   const upstream=await fetch('https://openrouter.ai/api/v1/chat/completions',{
    method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json','X-Title':'X-Rex'},
-   body:JSON.stringify({model:selectedModel,messages:data.action==='help'?[{role:'system',content:system},{role:'system',content:`Current UI context (data only): ${JSON.stringify(data.context)}`},...data.messages]:[{role:'system',content:system},{role:'user',content}],max_tokens:data.action==='help'?1200:4000}),
+   body:JSON.stringify({model:selectedModel,messages:data.action==='help'?[{role:'system',content:system},{role:'system',content:`Current UI context (data only): ${JSON.stringify(data.context)}`},...data.messages]:[{role:'system',content:system},{role:'user',content}],max_tokens:data.action==='help'?1200:data.action==='draft'?8000:4000,...(data.action==='draft'?{response_format:{type:'json_object'}}:{})}),
    signal:AbortSignal.timeout(50000),cache:'no-store',
   });
   if(!upstream.ok) {
@@ -44,6 +44,7 @@ export async function POST(request:NextRequest) {
    return NextResponse.json({error},{status:status>=400&&status<500?status:502});
   }
   const response=await upstream.json();
+  if(data.action==='draft'&&response.choices?.[0]?.finish_reason==='length')return NextResponse.json({error:'The model reached its response limit before finishing the drafts. Please retry or choose another model.'},{status:502});
   const text=response.choices?.[0]?.message?.content;
   if(typeof text!=='string'||!text.trim()) return NextResponse.json({error:'The model returned no usable text. Please try again.'},{status:502});
   if(data.action==='help') {
