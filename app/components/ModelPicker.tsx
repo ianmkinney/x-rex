@@ -1,0 +1,11 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {DEFAULT_MODEL} from '@/lib/drafts';
+type Model={id:string;name:string};
+export default function ModelPicker({value,onChange,disabled}:{value:string;onChange:(value:string)=>void;disabled:boolean}){
+ const [models,setModels]=useState<Model[]>([]),[query,setQuery]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[retry,setRetry]=useState(0);
+ useEffect(()=>{const controller=new AbortController();setLoading(true);setError('');fetch('/api/models',{signal:controller.signal}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load models.');setModels(data.models);}).catch(e=>{if(!controller.signal.aborted)setError(e.message);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});return()=>controller.abort();},[retry]);
+ const filtered=models.filter(m=>`${m.name} ${m.id}`.toLowerCase().includes(query.toLowerCase()));
+ const selected=models.find(m=>m.id===value);
+ return <section className="model-picker" aria-label="OpenRouter model selection"><div><div className="mini-label">OPENROUTER</div><p>Choose your writing model</p><small>Used for posts and custom audiences. Screenshots use Sonnet.</small></div><div className="model-controls"><label className="field">Find a model<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search Claude, GPT, Gemini…" disabled={disabled||loading}/></label><label className="field">Writing model<select value={value} onChange={e=>onChange(e.target.value)} disabled={disabled}><option value={DEFAULT_MODEL}>Claude Sonnet · latest (default)</option>{selected&&!filtered.some(m=>m.id===value)&&<option value={selected.id}>{selected.name}</option>}{filtered.filter(m=>m.id!==DEFAULT_MODEL).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label><p className="hint" role="status">{loading?'Loading OpenRouter models…':error||`${filtered.length} matching models · Availability depends on your OpenRouter account.`}</p>{error&&<button className="text-button" disabled={disabled} onClick={()=>setRetry(n=>n+1)}>Retry model list</button>}</div></section>;
+}

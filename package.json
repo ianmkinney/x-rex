@@ -1,7 +1,7 @@
 {
   "name": "x-rex",
   "version": "1.0.0",
-  "description": "X-Rex \u2014 deterministic X audience scenario lab",
+  "description": "X-Rex — deterministic X audience scenario lab",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
@@ -21,6 +21,7 @@
     "next": "^16.3.8",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "twitter-text": "^3.1.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -28,6 +29,7 @@
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/twitter-text": "^3.1.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },

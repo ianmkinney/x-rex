@@ -58,4 +58,6 @@ test('generation briefs expose actionable source markers and require a per-post 
  assert.match(prompt,/do not invent probabilities, contributions, or an optimal score/);
  assert.match(prompt,/OONRetweetReplyFilter/);
  assert.match(prompt,/Restaurant owners/);
+ assert.match(prompt,/Make the post enjoyable and effortless to read/);
+ assert.match(prompt,/Do not force jokes/);
 });

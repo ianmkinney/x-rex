@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {draftFixture} from './draft-fixture';
 test('analysis, score overrides, eligibility, custom audiences, and reverse brief',async({page},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');
@@ -41,8 +42,8 @@ test('file import, API validation, and server credential UI',async({page,request
  await page.getByRole('tab',{name:'Build for an audience'}).click();
  await expect(page.locator('input[type=password]')).toHaveCount(0);
  // Deliberate mock: proves client wiring without spending a configured provider credential.
- await page.route('**/api/ai',route=>route.fulfill({json:{text:'1. MOCK TEST DRAFT',model:'test-sonnet-model'}}));
- await page.getByRole('button',{name:'Generate with Sonnet'}).click();
- await expect(page.getByText('1. MOCK TEST DRAFT', {exact:true})).toBeVisible();
+ await page.route('**/api/ai',route=>route.fulfill({json:draftFixture}));
+ await page.getByRole('button',{name:'Generate posts'}).click();
+ await expect(page.getByLabel('Post option 1',{exact:true})).toHaveValue(draftFixture.posts[0].text);
  expect(await page.evaluate(()=>JSON.stringify(localStorage)+JSON.stringify(sessionStorage))).not.toContain('sk-or');
 });

@@ -49,7 +49,7 @@ Phoenix inference/training, model checkpoint acquisition, viewer-history retriev
 
 ## AI boundary
 
-Prompt templates and deterministic custom profiles are generated locally. Optional Sonnet generates text, proposes archetypes, or transcribes screenshots. These steps can vary across requests, providers, and model updates. The latest alias is `~anthropic/claude-sonnet-latest` (https://openrouter.ai/~anthropic/claude-sonnet-latest). Scoring never calls an LLM. An accepted AI profile/text plus fixed inputs yields reproducible engine results; an LLM response is not called deterministic.
+Prompt templates and deterministic custom profiles are generated locally. A user-selected OpenRouter model generates text or proposes archetypes; Sonnet handles screenshots by default. The model catalog is loaded from OpenRouter, while the default writing option remains latest Sonnet. Structured draft responses separate publishable text from short editorial rationales; this separation does not turn model explanations into verified causal evidence. These steps can vary across requests, providers, and model updates. The latest alias is `~anthropic/claude-sonnet-latest` (https://openrouter.ai/~anthropic/claude-sonnet-latest). Scoring never calls an LLM. An accepted AI profile/text plus fixed inputs yields reproducible engine results; an LLM response is not called deterministic.
 
 ## Public-profile briefs
 

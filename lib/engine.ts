@@ -134,7 +134,7 @@ AUDIENCE BRIEF
 ${archetypes.map(a=>`- ${a.name}: ${a.description}\n  Interests: ${a.interests.join(', ')}. Vocabulary where relevant: ${a.terms.join(', ')}.`).join('\n')}
 
 VOICE
-${tone}. Give a concrete, useful idea. Do not invent personal experiences, metrics, claims, or sources. Avoid keyword stuffing, engagement bait, and forced questions. Invite a substantive reply only when it fits naturally.
+${tone}. Make the post enjoyable and effortless to read: everyday words, short sentences, natural contractions where appropriate, and a varied rhythm. Start with a specific observation or relatable moment rather than a generic hook. Let warmth, personality, or light wit in when the topic supports it; thoughtful or serious topics can stay direct. Do not force jokes, slang, emojis, or a conversational voice. Avoid corporate jargon, dense clauses, robotic templates, and repeated question endings. Vary the three options: one warm and conversational, one crisp and insightful, and one lightly playful if appropriate (otherwise thoughtful). Respect the chosen voice throughout. Read each aloud and simplify awkward wording before returning it. Give a concrete, useful idea. Do not invent personal experiences, metrics, claims, or sources. Avoid keyword stuffing, engagement bait, and forced questions. Invite a substantive reply only when it fits naturally.
 
 OUTPUT
 Return 3 numbered options. For each, separate:
