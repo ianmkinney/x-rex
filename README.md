@@ -73,7 +73,7 @@ Without X API access, paste a public bio and post excerpts. Pasted evidence is e
 
 Generation favors short, natural sentences and varied rhythm, with conversational or playful options when the topic fits. The server validates three structured post options with separate audience explanations, exact marker names, and negative-feedback checks. Malformed output is rejected rather than mixing reasoning into publishable text.
 
-Each option has an editable post-only box, Copy post, and Post on X. Copy and X's composer receive only the edited text. Reasoning appears in a separate box below; edits mark it as referring to the original draft. `twitter-text` checks X's weighted length (including URLs, emoji, and CJK); invalid standard-length posts cannot open the composer until edited. Posting is completed by the user in X, never automatically.
+Each option has an editable post-only box, Copy post, and Post on X. Copy and X's composer receive only the edited text. Reasoning appears in a separate box below; edits mark it as referring to the original draft. `twitter-text` checks weighted length (including URLs, emoji, and CJK) against the selected mode. Room to talk defaults to 450–900 characters with a 1,200-character app limit; Standard is capped at 280. Longer posts require long-post access on X. Invalid or over-limit drafts cannot open the composer until edited. Posting is completed by the user in X, never automatically.
 
 `GET /api/models` reads OpenRouter's public catalog without credentials and caches it for one hour. A catalog outage retains the default Sonnet option and provides Retry. Model availability and output quality vary by provider and account.
 
@@ -84,3 +84,13 @@ The **Your writing style** panel at the top accepts a public X profile or pasted
 A five-step first-visit tour has Back, Next, direct step navigation, and Skip. Skip/completion sets `xrex_tour_v1=done`, a one-year first-party SameSite=Lax cookie (Secure on HTTPS), with no profile content. **Quick tour** replays it anytime.
 
 **Talk to X-Rex** opens a session-only chat using the selected model and the existing server credential. The help endpoint accepts bounded user/assistant history and minimal UI context (tab, voice configured); it does not automatically receive writing samples, imported profiles, or post text. Responses contain a short explanation and allowlisted navigation suggestions. Navigation happens only when the user clicks a button; chat cannot publish, change configuration, or call arbitrary tools. Welcome shortcuts work even before AI is configured.
+
+## Creator discovery and inspiration
+
+**Discover creators** searches the official X recent-search API, starting with Restaurants and the topic AI services. Other verticals include AI & technology, Small business, and Creators & marketing. Topic words are quoted and sanitized; callers cannot inject X search operators or arbitrary URLs. The server uses only `X_BEARER_TOKEN`. Search endpoint access/credits are required in the X developer account.
+
+Rankings cover up to 100 recent matching English-language original posts from the last seven days, not all accounts or all-time performance. Each card shows a public bio, follower count when available, and the highest-engagement matching post observed for that account, with its date and original X link. Engagement is likes + reposts + replies + quotes, not the For You score. Missing counts remain unavailable; no follower numbers, reach claims, or posts are fabricated. The user can also sort accounts by followers within the same sample.
+
+**Write like @username** opens the audience builder with up to five observed public examples and a suggested topic. The session borrows high-level style traits rather than copying posts or impersonating an author. A toggle includes/excludes the user's saved voice, giving it priority when blended. Examples remain in the browser session and are sent to OpenRouter only on explicit generation (or included in a copied prompt). A direct username flow imports recent public original posts through the existing profile route. Clear creator inspiration returns to the ordinary audience workflow.
+
+Prompts now explicitly welcome relevant emoji, contractions, conversational detail, and short paragraphs. The default expanded mode gives a thought room to develop rather than compressing every idea into a short slogan.

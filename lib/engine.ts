@@ -1,3 +1,4 @@
+import {lengthGuide,postLimit,type PostLength} from './writing';
 import {voicePrompt,type WriterVoice} from './voice';
 /**
  * X-Rex v1. The public arithmetic is distinct from the HAI lexical surrogate.
@@ -126,8 +127,11 @@ The extra +15 reply weight applies only to eligible mutual-follow original posts
 AUDIENCE MATCHING — X-REX ASSUMPTIONS, NOT X MARKERS
 Use the selected audience's interests and vocabulary only where they fit the topic naturally. X-Rex estimates affinity from unique literal term matches: 1 - exp(-match count / 3). Its surrogate also uses question marks, practical-guide words, links, text length, media, and the selected behavior preset. These are simulator heuristics, not verified Phoenix features. Do not keyword-stuff, pad text, add unnecessary links, or insert questions to game those heuristics. The profile flow uses editable public-interest hypotheses, not private feed data.`;
 }
-export function buildPrompt(archetypes:Archetype[],topic:string,tone:string,voice?:WriterVoice):string {
- return `Write 3 distinct original X posts, each no more than 280 characters, about: ${topic.trim()||'[your topic]'}.
+export function buildPrompt(archetypes:Archetype[],topic:string,tone:string,voice?:WriterVoice,length:PostLength='expanded'):string {
+ return `Write 3 distinct original X posts about: ${topic.trim()||'[your topic]'}.
+
+LENGTH
+${lengthGuide(length)}
 
 ${algorithmMarkers()}
 
@@ -135,17 +139,17 @@ AUDIENCE BRIEF
 ${archetypes.map(a=>`- ${a.name}: ${a.description}\n  Interests: ${a.interests.join(', ')}. Vocabulary where relevant: ${a.terms.join(', ')}.`).join('\n')}
 
 VOICE
-${tone}. Make the post enjoyable and effortless to read: everyday words, short sentences, natural contractions where appropriate, and a varied rhythm. Start with a specific observation or relatable moment rather than a generic hook. Let warmth, personality, or light wit in when the topic supports it; thoughtful or serious topics can stay direct. Do not force jokes, slang, emojis, or a conversational voice. Avoid corporate jargon, dense clauses, robotic templates, and repeated question endings. Vary the three options: one warm and conversational, one crisp and insightful, and one lightly playful if appropriate (otherwise thoughtful). Respect the chosen voice throughout. Read each aloud and simplify awkward wording before returning it. Give a concrete, useful idea. Do not invent personal experiences, metrics, claims, or sources. Avoid keyword stuffing, engagement bait, and forced questions. Invite a substantive reply only when it fits naturally.
+${tone}. Make the post enjoyable and effortless to read, with the energy of explaining something interesting to a real person. Use contractions, varied sentence lengths, specific details, and a little warmth. Give the idea room to breathe: an observation, a useful explanation or example, then a takeaway. Use “you” naturally when it fits. Add 1–3 relevant emoji when they add warmth, clarify a point, or create a visual pause; include emoji in at least one option unless the subject is sensitive or the saved voice explicitly avoids them. Emoji are welcome, not decoration on every line. Do not force jokes, slang, or fake excitement. Avoid clipped slogans, generic listicles, corporate language, canned hooks, and three identical question endings. A natural question is optional, not the whole post. Vary the three options: warmly conversational, a more detailed practical explanation, and lightly playful when appropriate. For serious topics, stay warm and thoughtful. Read each aloud: it should feel like someone talking, not a marketing template. No invented anecdotes, first-person experiences, numbers, sources, or results.
 
 OUTPUT
 Return 3 numbered options. For each, separate:
-Post: the ready-to-publish text, no more than 280 characters. Never put marker names, weights, or analysis inside the post.
+Post: the ready-to-publish text, following the selected length (${postLimit(length)} weighted-character maximum). Never put marker names, weights, or analysis inside the post.
 Audience fit: name the selected interest and explain the concrete relevance.
 Markers used: identify 2–4 relevant heads by exact name and weight from above; quote the phrase or structure in this option that supports each and explain the intended viewer action. Mark each relationship as a writing hypothesis, not a predicted outcome. Do not list signals the post does not meaningfully support.
 Negative-feedback check: name the relevant negative head(s) and explain how the wording avoids the specific risk.
 ${voicePrompt(voice)}
 
-Keep the rationale outside the 280-character post. No promises about impressions, ranking, virality, or For You placement.
+Keep the rationale outside the post. No promises about impressions, ranking, virality, or For You placement.
 
 PROVENANCE
 Brief generated deterministically by ${ENGINE_VERSION}. X source: ${SOURCE_URL}/xai-value-model/scoring.rs (revision ${SOURCE_SHA}). Archetypes are HAI user-defined scenarios, not official X audience segments. LLM wording is a separate, non-deterministic step.`;

@@ -1,0 +1,26 @@
+import {test,expect} from '@playwright/test';
+import {draftFixture} from './draft-fixture';
+test('discover creators, inspect standout posts, and blend a saved voice into a new session',async({page,context},testInfo)=>{
+ await context.addCookies([{name:'xrex_tour_v1',value:'done',url:'http://localhost:3000'}]);
+ await page.addInitScript(()=>localStorage.setItem('xrex:voice:v1',JSON.stringify({handle:'@me',examples:'My distinctive kitchen rhythm.',notes:'Warm and funny.'})));
+ await page.route('**/api/models',r=>r.fulfill({json:{models:[]}}));
+ const post={id:'123',text:'The phone rings right in the middle of dinner service. Again. ☎️ Let AI handle the routine questions so your team can stay with the guests.',engagement:150,likes:100,reposts:30,replies:15,quotes:5,createdAt:'2026-10-03T12:00:00Z'};
+ await page.route('**/api/discover',r=>{expect(r.request().postDataJSON()).toEqual({vertical:'restaurants',topic:'AI services'});return r.fulfill({json:{creators:[{username:'kitchentech',name:'Kitchen Tech',bio:'Restaurant technology that gives teams room to breathe.',followers:5200,posts:[post],standout:post}],sampleSize:1,scope:'Test sample of recent public posts.',searchedAt:'2026-10-04T12:00:00Z'}});});
+ const requests:Record<string,string>[]=[];await page.route('**/api/ai',r=>{requests.push(r.request().postDataJSON());return r.fulfill({json:{...draftFixture,maxLength:1200}});});
+ await page.goto('/');await page.getByRole('tab',{name:'Discover creators'}).click();
+ await page.getByRole('button',{name:'Find accounts',exact:true}).click();
+ await expect(page.getByText('Kitchen Tech',{exact:true})).toBeVisible();await expect(page.locator('.standout-post')).toContainText(post.text);
+ await expect(page.getByRole('link',{name:'View post on X'})).toHaveAttribute('href','https://x.com/kitchentech/status/123');
+ await page.screenshot({path:`test-results/${testInfo.project.name}-discovery.png`,fullPage:true});
+ await page.getByRole('button',{name:'Write like @kitchentech'}).click();
+ await expect(page.getByRole('tab',{name:'Build for an audience'})).toHaveAttribute('aria-selected','true');
+ await expect(page.getByLabel('Blend in my saved voice')).toBeChecked();
+ await expect(page.getByLabel('Generated prompt')).toHaveValue(/My distinctive kitchen rhythm/);await expect(page.getByLabel('Generated prompt')).toHaveValue(/The phone rings/);
+ await page.getByLabel('Blend in my saved voice').uncheck();await expect(page.getByLabel('Generated prompt')).not.toHaveValue(/My distinctive kitchen rhythm/);
+ await page.getByRole('button',{name:'Generate posts',exact:true}).click();await expect(page.getByLabel('Post option 1',{exact:true})).toBeVisible();expect(requests[0].length).toBe('expanded');
+ await expect(page.locator('.post-count').first()).toContainText('/ 1200');
+ await page.getByRole('combobox',{name:'Post length',exact:false}).selectOption('standard');await expect(page.getByLabel('Generated prompt')).toHaveValue(/never more than 280/);
+ await page.getByRole('button',{name:'Clear creator inspiration'}).click();await expect(page.getByLabel('Generated prompt')).not.toHaveValue(/CREATOR STYLE REFERENCE/);
+ await page.getByRole('tab',{name:'Discover creators'}).click();await expect(page.getByText('Kitchen Tech',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
