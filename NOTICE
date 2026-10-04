@@ -1,0 +1,11 @@
+X-Rex
+Copyright 2026 HAI Consulting
+
+This product contains TypeScript adaptations of selected scoring arithmetic and numeric defaults from xai-org/x-algorithm, licensed under the Apache License, Version 2.0.
+Upstream: https://github.com/xai-org/x-algorithm
+Revision: b412112d03f27acbfd668e0cc040abcafa1080c1
+Original files: home-mixer/params/param.rs, xai-value-model/scoring.rs,
+xai-value-model/weights.rs, xai-value-model/inputs.rs.
+Modified/adapted by HAI Consulting for a limited deterministic scenario simulator.
+The HAI lexical surrogate and archetypes are separate, synthetic assumptions.
+This product is not affiliated with or endorsed by X or xAI.
