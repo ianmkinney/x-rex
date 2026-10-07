@@ -1,4 +1,4 @@
-import {createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
+import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {clientIp} from '../client-ip';
 import {readPasskeys,relyingParty,requestOrigin} from './passkeys';
 import {incrementWindow,storageReady} from './store';
@@ -11,7 +11,9 @@ type Token={t:Kind;n:string;e?:string;x:number};
 const secret=()=>process.env.SESSION_SECRET?.trim()||'';
 const password=()=>process.env.OWNER_PASSWORD||'';
 export const authReady=()=>password().length>=16&&secret().length>=32;
-export function equal(a:string,b:string){const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);}
+const digest=(v:string)=>createHash('sha256').update(v).digest();
+/** Constant-time over fixed-length digests, so the secret's length does not leak either. */
+export function equal(a:string,b:string){return timingSafeEqual(digest(a),digest(b));}
 export const checkPassword=(value:string)=>authReady()&&equal(value,password());
 export const cookieOptions=(maxAge:number)=>({path:'/',maxAge,secure:true});
 
