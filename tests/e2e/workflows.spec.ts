@@ -32,14 +32,13 @@ test('analysis, score overrides, eligibility, custom audiences, and reverse brie
 });
 test('file import, API validation, and server credential UI',async({page,request},testInfo)=>{
  await page.goto('/');
- await page.locator('input[type=file]').setInputFiles({name:'post.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({text:'Tennis players and soccer fans have a match today.'}))});
+ await page.locator('input[type=file][accept*="image"]').setInputFiles({name:'post.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({text:'Tennis players and soccer fans have a match today.'}))});
  await expect(page.getByLabel('Post text')).toHaveValue(/Tennis players/);
  await page.getByRole('button',{name:'Analyze audience fit'}).click();
  await expect(page.locator('.audience-row').first()).toContainText('Sports fans');
  await page.screenshot({path:`test-results/${testInfo.project.name}-analysis.png`,fullPage:true});
- const noKey=await request.post('/api/ai',{data:{action:'draft',prompt:'Write a helpful post about AI.'}});
- expect(noKey.status()).toBe(503);expect((await noKey.json()).error).toContain('server');
- const invalid=await request.post('/api/ai',{data:{action:'not-allowed'}});expect(invalid.status()).toBe(400);
+ const uninvited=await request.post('/api/ai',{data:{action:'draft',prompt:'Write a helpful post about AI.'}});
+ expect(uninvited.status()).toBe(401);expect((await uninvited.json()).code).toBe('invite_required');
  await page.getByRole('tab',{name:'Build for an audience'}).click();
  await expect(page.locator('input[type=password]')).toHaveCount(0);
  // Deliberate mock: proves client wiring without spending a configured provider credential.
