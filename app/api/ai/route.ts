@@ -1,5 +1,6 @@
 import {contentGuidance} from '@/lib/content-guidance';
 import {NextRequest,NextResponse} from 'next/server';
+import {withPaidGuard} from '@/lib/paid-guard';
 import {postLimit} from '@/lib/writing';
 import {HELP_SYSTEM,helpSchema} from '@/lib/help';
 import {z} from 'zod';
@@ -12,7 +13,7 @@ const input=z.discriminatedUnion('action',[
  z.object({action:z.literal('transcribe'),image:z.string().max(4_000_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/)}),
 ]);
 const archetypeSchema=z.object({name:z.string().min(1).max(42),description:z.string().min(1).max(600),terms:z.array(z.string().min(1).max(50)).min(3).max(35),interests:z.array(z.string().min(1).max(60)).min(1).max(5),behavior:z.enum(['builder','reader','conversational','curator'])});
-export async function POST(request:NextRequest) {
+export const POST=withPaidGuard(async (request:NextRequest)=>{
  try {
   const declared=Number(request.headers.get('content-length')||0);
   if(declared>4_100_000) return NextResponse.json({error:'Upload is too large. Use an image under 2.8 MB.'},{status:413});
@@ -72,4 +73,4 @@ export async function POST(request:NextRequest) {
   const timeout=error instanceof Error&&['TimeoutError','AbortError'].includes(error.name);
   return NextResponse.json({error:timeout?'The selected model took too long to respond. Please retry.':'Unable to reach the AI provider. Please try again.'},{status:timeout?504:502});
  }
-}
+});
