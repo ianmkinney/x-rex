@@ -1,0 +1,97 @@
+import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
+import {isIP} from 'node:net';
+import {NextResponse,type NextRequest} from 'next/server';
+
+export const INVITE_COOKIE='xrex_invite';
+export const INVITE_MAX_AGE=60*60*24*30;
+export const INVITE_ATTEMPTS_PER_IP=20;
+type Handler=(request:NextRequest)=>Promise<Response>;
+const guarded=new WeakSet<Handler>();
+const json=(body:Record<string,unknown>,status:number,headers:Record<string,string>={})=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store',...headers}});
+
+export function paidFeaturesEnabled(){return process.env.PAID_FEATURES_ENABLED?.trim().toLowerCase()!=='false';}
+function inviteCodes(){return (process.env.INVITE_CODES||'').split(',').map(c=>c.trim()).filter(Boolean);}
+function digest(value:string){return createHash('sha256').update(value).digest();}
+function safeEqual(a:string,b:string){return timingSafeEqual(digest(a),digest(b));}
+
+// The cookie holds an HMAC of the code, never the code itself. Removing a code from INVITE_CODES revokes its cookies.
+export function inviteToken(code:string){return createHmac('sha256',process.env.INVITE_COOKIE_SECRET?.trim()||'x-rex-invite-v1').update(`invite:v1:${code}`).digest('base64url');}
+export function isValidInviteCode(code:string){const input=code.trim();let match=false;for(const c of inviteCodes())if(safeEqual(c,input))match=true;return input.length>0&&match;}
+export function hasValidInvite(request:NextRequest){
+ const value=request.cookies.get(INVITE_COOKIE)?.value;
+ if(!value)return false;
+ let match=false;for(const c of inviteCodes())if(safeEqual(inviteToken(c),value))match=true;
+ return match;
+}
+export function setInviteCookie(response:NextResponse,code:string){
+ response.cookies.set(INVITE_COOKIE,inviteToken(code.trim()),{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:INVITE_MAX_AGE});
+ return response;
+}
+
+// Only the right-most X-Forwarded-For entry is written by the platform proxy (Vercel overwrites the header);
+// left-most entries are client-controlled. IPv6 is bucketed by /64 so one host cannot rotate addresses.
+export function clientIp(request:Request){
+ const candidate=request.headers.get('x-forwarded-for')?.split(',').map(s=>s.trim()).filter(Boolean).at(-1)||'';
+ const version=isIP(candidate);
+ if(version===4)return candidate;
+ if(version!==6)return 'unknown';
+ const mapped=candidate.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+ if(mapped)return mapped[1];
+ const [head,tail]=candidate.toLowerCase().split('::');
+ const h=head?head.split(':'):[],t=tail?tail.split(':'):[];
+ const groups=tail===undefined?h:[...h,...Array(Math.max(0,8-h.length-t.length)).fill('0'),...t];
+ return `${groups.slice(0,4).map(g=>parseInt(g,16).toString(16)).join(':')}::/64`;
+}
+
+export type CounterStore={incr(key:string,ttlSeconds:number):Promise<number>};
+let memoryDay='';
+const memory=new Map<string,number>();
+export const memoryStore:CounterStore={async incr(key){
+ const day=utcDay();
+ if(day!==memoryDay){memory.clear();memoryDay=day;}
+ const count=(memory.get(key)||0)+1;memory.set(key,count);return count;
+}};
+export function resetMemoryStore(){memory.clear();memoryDay='';}
+function redisConfig(){
+ const pairs=[[process.env.UPSTASH_REDIS_REST_URL,process.env.UPSTASH_REDIS_REST_TOKEN],[process.env.KV_REST_API_URL,process.env.KV_REST_API_TOKEN]];
+ const pair=pairs.find(([url,token])=>url?.trim()&&token?.trim());
+ return pair?{url:pair[0]!.trim().replace(/\/+$/,''),token:pair[1]!.trim()}:null;
+}
+function redisStore(url:string,token:string):CounterStore{return {async incr(key,ttlSeconds){
+ const response=await fetch(`${url}/pipeline`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify([['INCR',key],['EXPIRE',key,String(ttlSeconds)]]),cache:'no-store',signal:AbortSignal.timeout(3000)});
+ if(!response.ok)throw new Error(`Counter store returned ${response.status}`);
+ const result=(await response.json() as {result?:unknown}[])?.[0]?.result;
+ if(typeof result!=='number')throw new Error('Counter store returned no count');
+ return result;
+}};}
+export function counterStore():CounterStore{const config=redisConfig();return config?redisStore(config.url,config.token):memoryStore;}
+export function counterBackend(){return redisConfig()?'redis':'memory';}
+
+function utcDay(now=Date.now()){return new Date(now).toISOString().slice(0,10);}
+export function secondsUntilUtcMidnight(now=Date.now()){const d=new Date(now);return Math.max(1,Math.ceil((Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1)-now)/1000));}
+function cap(name:string,fallback:number){const raw=process.env[name]?.trim();const value=raw?Number(raw):NaN;return Number.isInteger(value)&&value>=0?value:fallback;}
+const COUNTER_TTL=60*60*48;
+
+export async function countInviteAttempt(request:NextRequest){return counterStore().incr(`xrex:invite:${utcDay()}:${clientIp(request)}`,COUNTER_TTL);}
+export function tooManyRequests(error:string){const retry=secondsUntilUtcMidnight();return json({error,code:'rate_limited',retryAfterSeconds:retry},429,{'Retry-After':String(retry)});}
+
+export async function paidAccessDenial(request:NextRequest):Promise<Response|null>{
+ if(!paidFeaturesEnabled())return json({error:'AI and X features are paused by the site owner right now. Free post scoring still works.',code:'paid_disabled'},503);
+ if(!hasValidInvite(request))return json({error:'This feature needs an invite code. Enter yours at the top of the page to unlock AI and X features. Free post scoring works without one.',code:'invite_required'},401);
+ const perIp=cap('PAID_DAILY_CAP_PER_IP',20),global=cap('PAID_DAILY_CAP_GLOBAL',300),day=utcDay(),store=counterStore();
+ try{
+  if(await store.incr(`xrex:paid:${day}:ip:${clientIp(request)}`,COUNTER_TTL)>perIp)return tooManyRequests(`You’ve used today’s ${perIp} AI and X requests. Your limit resets at midnight UTC.`);
+  if(await store.incr(`xrex:paid:${day}:global`,COUNTER_TTL)>global)return tooManyRequests('X-Rex has reached today’s shared limit for AI and X requests. Please try again after midnight UTC.');
+ }catch{
+  return json({error:'Usage limits can’t be checked right now, so AI and X features are paused. Please try again shortly.',code:'limits_unavailable'},503);
+ }
+ return null;
+}
+
+// Every route that spends OpenRouter or X API credit must export its handler through this wrapper.
+export function withPaidGuard(handler:Handler):Handler{
+ const wrapped:Handler=async request=>(await paidAccessDenial(request))??handler(request);
+ guarded.add(wrapped);
+ return wrapped;
+}
+export function isPaidGuarded(handler:unknown){return typeof handler==='function'&&guarded.has(handler as Handler);}

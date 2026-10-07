@@ -1,9 +1,10 @@
 import {NextRequest,NextResponse} from 'next/server';
+import {withPaidGuard} from '@/lib/paid-guard';
 import {parseHandle,type PublicProfile} from '@/lib/profile';
 export const maxDuration=30;
 const reply=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});
 function apiError(status:number){return status===401?'X rejected the server credential. Please contact the site administrator.':status===403?'The server’s X API account does not have access to this endpoint.':status===404?'This public profile could not be found.':status===429?'X is rate limiting requests. Try again later.':status===402?'The server’s X API account needs credits or endpoint access.':'X could not return the public data. Try again or paste it manually.';}
-export async function POST(request:NextRequest){
+export const POST=withPaidGuard(async (request:NextRequest)=>{
  try{
   const raw=await request.text();if(raw.length>1000)return reply({error:'Profile input is too long.'},413);
   let body:unknown;try{body=JSON.parse(raw);}catch{return reply({error:'Invalid profile request.'},400);}
@@ -31,4 +32,4 @@ export async function POST(request:NextRequest){
   }catch{profile.warning='Profile loaded, but fetching posts timed out. You can paste public post excerpts below.';}
   return reply({profile});
  }catch{return reply({error:'Could not reach X. Please retry or paste the public text manually.'},502);}
-}
+});
