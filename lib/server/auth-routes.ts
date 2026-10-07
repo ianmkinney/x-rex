@@ -71,7 +71,7 @@ export async function authRoute(action:string,req:Request):Promise<Response|null
   if(action==='passkey/step/verify'){
    if(await tooManyAttempts(req,'passkey'))return limited();
    await verifyAssertion(assertion(await req.json()),'step',s!.nonce);
-   return set(reply({ok:true,seconds:STEP_UP_SECONDS}),STEP_COOKIE,issueStepUp(),STEP_UP_SECONDS);
+   return set(reply({ok:true,seconds:STEP_UP_SECONDS}),STEP_COOKIE,issueStepUp(s!),STEP_UP_SECONDS);
   }
   if(action==='passkeys/rename'){const b=z.object({id,name}).strict().parse(await req.json());await renamePasskey(b.id,b.name);return reply({ok:true});}
   if(action==='passkeys/remove'||action==='passkeys/recovery-codes'){

@@ -45,8 +45,12 @@ export async function signedIn(req:Request){
  const {epoch,credentials}=await readPasskeys();
  return credentials.length>0&&epoch!==''&&equal(s.epoch,epoch);
 }
-export const issueStepUp=()=>issue('step',STEP_UP_SECONDS);
-export const steppedUp=(req:Request)=>Boolean(session(req)&&read(req,STEP_COOKIE,'step'));
+/** Bound to one session: a step-up from another browser, or from before a session was re-issued, does not count. */
+export const issueStepUp=(s:{nonce:string;epoch:string})=>issue('step',STEP_UP_SECONDS,{n:s.nonce,e:s.epoch});
+export function steppedUp(req:Request){
+ const s=session(req),t=read(req,STEP_COOKIE,'step');
+ return Boolean(s&&t&&t.e&&equal(t.n,s.nonce)&&equal(t.e,s.epoch));
+}
 
 export async function tooManyAttempts(req:Request,bucket:string,limit=10){
  return await incrementWindow(`xrex:auth:attempts:${bucket}:${clientIp(req)}`,ATTEMPT_WINDOW_SECONDS)>limit;

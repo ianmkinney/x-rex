@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {NextRequest} from 'next/server';
 import {authRoute} from '../lib/server/auth-routes';
-import {SESSION_COOKIE,PRE_COOKIE,signedIn} from '../lib/server/auth';
+import {SESSION_COOKIE,PRE_COOKIE,STEP_COOKIE,signedIn} from '../lib/server/auth';
 import {readPasskeys,relyingParty,relyingPartyConfigError} from '../lib/server/passkeys';
 import {withPaidGuard} from '../lib/paid-guard';
 import {POST as discover} from '../app/api/discover/route';
@@ -138,6 +138,9 @@ test('managing passkeys needs a fresh assertion, never drops the last one, and r
  assert.equal(await b.signedIn(),true,'the remover gets a re-issued session');
  assert.equal(await elsewhere.b.signedIn(),false,'other sessions are revoked');
  assert.deepEqual((await readPasskeys()).credentials.map(c=>c.name),['Phone']);
+ assert.equal((await b.call('passkeys/recovery-codes',{})).status,403,'removal re-issued the session, so the old step-up no longer counts');
+ const again=await b.call('passkey/step/options',{});
+ assert.equal((await b.call('passkey/step/verify',{response:phone.get(again.body.challenge)})).status,200);
  const codes=await b.call('passkeys/recovery-codes',{});assert.equal(codes.body.recoveryCodes.length,10);
 }));
 
@@ -270,4 +273,23 @@ test('sameOrigin compares against pinned origins whenever they are set',()=>with
  process.env.WEBAUTHN_ORIGINS=ORIGIN;
  assert.equal((await post('https://other.test/api/auth/login','https://other.test')).status,403,'pinned: own origin is not enough');
  assert.equal((await post('https://other.test/api/auth/login',ORIGIN)).status,200);
+}));
+
+test('the step-up cookie is bound to the session nonce and epoch',()=>withLab(async()=>{
+ const {b,key}=await enroll();
+ const other=await signIn(key);await other.verify();
+ const step=await b.call('passkey/step/options',{});
+ assert.equal((await b.call('passkey/step/verify',{response:key.get(step.body.challenge)})).status,200);
+ const stepCookie=b.jar.get(STEP_COOKIE)!;
+ const [body]=stepCookie.split('.');const claims=JSON.parse(Buffer.from(body,'base64url').toString());
+ const [sessionBody]=b.jar.get(SESSION_COOKIE)!.split('.');const sessionClaims=JSON.parse(Buffer.from(sessionBody,'base64url').toString());
+ assert.equal(claims.n,sessionClaims.n);assert.equal(claims.e,sessionClaims.e);
+ assert.equal((await b.call('passkeys')).body.steppedUp,true);
+ other.b.jar.set(STEP_COOKIE,stepCookie);
+ assert.equal((await other.b.call('passkeys')).body.steppedUp,false,"another session's step-up is rejected");
+ assert.equal((await other.b.call('passkeys/recovery-codes',{})).status,403);
+ assert.equal((await other.b.call('passkey/register/options',{})).status,403);
+ const relogin=await signIn(key,b);assert.equal((await relogin.verify()).status,200);
+ b.jar.set(STEP_COOKIE,stepCookie);
+ assert.equal((await b.call('passkeys/recovery-codes',{})).status,403,'a step-up from a previous session in the same browser is rejected');
 }));
