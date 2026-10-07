@@ -30,14 +30,30 @@ export function requestOrigin(req:Request){
  if(proto==='http'||proto==='https')url.protocol=`${proto}:`;
  return url;
 }
+type Env=Record<string,string|undefined>;
+export const isProductionEnv=(env:Env=process.env)=>env.NODE_ENV==='production'||env.VERCEL_ENV==='production';
+const pinnedOrigins=(env:Env)=>(env.WEBAUTHN_ORIGINS??'').split(',').map(s=>s.trim().replace(/\/$/,'')).filter(Boolean);
+const underRpId=(origin:string,rpID:string)=>{try{const u=new URL(origin);return u.origin===origin&&(u.hostname===rpID||u.hostname.endsWith(`.${rpID}`));}catch{return false;}};
+/** Null when the relying party is usable. Production must pin both values, and every origin must be a bare origin under the RP ID. */
+export function relyingPartyConfigError(env:Env=process.env){
+ if(!isProductionEnv(env))return null;
+ const rpID=env.WEBAUTHN_RP_ID?.trim(),origins=pinnedOrigins(env);
+ if(!rpID||!origins.length)return 'Passkey sign-in is not configured: set WEBAUTHN_RP_ID and WEBAUTHN_ORIGINS in production.';
+ if(!origins.every(o=>underRpId(o,rpID)))return 'Passkey sign-in is misconfigured: each WEBAUTHN_ORIGINS entry must be an origin (https://host[:port]) on WEBAUTHN_RP_ID or a subdomain of it.';
+ return null;
+}
 /**
- * RP ID and allowed origins. Production should pin WEBAUTHN_RP_ID / WEBAUTHN_ORIGINS; otherwise the request host is used,
- * which suits local dev and per-URL Vercel previews (passkeys are bound to the exact host, so each preview enrolls separately).
+ * RP ID and allowed origins. Production uses only the pinned WEBAUTHN_RP_ID / WEBAUTHN_ORIGINS and never request headers.
+ * Elsewhere the request host is used, which suits local dev and per-URL Vercel previews (each preview enrolls separately).
  */
-export function relyingParty(req:Request,env:Record<string,string|undefined>=process.env){
- const url=requestOrigin(req),pinned=env.WEBAUTHN_RP_ID?.trim();
- const origins=(env.WEBAUTHN_ORIGINS??'').split(',').map(s=>s.trim().replace(/\/$/,'')).filter(Boolean);
- return {rpID:pinned||url.hostname,rpName:env.WEBAUTHN_RP_NAME?.trim()||'X-Rex',origins:origins.length?origins:[pinned?`https://${pinned}`:url.origin]};
+export function relyingParty(req:Request,env:Env=process.env){
+ const rpName=env.WEBAUTHN_RP_NAME?.trim()||'X-Rex',pinned=env.WEBAUTHN_RP_ID?.trim(),origins=pinnedOrigins(env);
+ if(isProductionEnv(env)){
+  const error=relyingPartyConfigError(env);if(error)throw new AuthError(error,503);
+  return {rpID:pinned!,rpName,origins};
+ }
+ const url=requestOrigin(req);
+ return {rpID:pinned||url.hostname,rpName,origins:origins.length?origins:[pinned?`https://${pinned}`:url.origin]};
 }
 
 const challengeKey=(c:string)=>`xrex:webauthn:challenge:${createHash('sha256').update(c).digest('hex')}`;

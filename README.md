@@ -64,8 +64,8 @@ The site owner can unlock paid features with a phone or laptop passkey instead o
 | `OWNER_PASSWORD` | Owner password, 16+ characters. The first sign-in step. |
 | `SESSION_SECRET` | 32+ random characters that sign the session cookies. Rotating it signs everyone out. |
 | `PASSKEY_SETUP_TOKEN` | One-time random secret (32+ characters) that, with the password, enrolls the **first** passkey. Remove it after enrolling. |
-| `WEBAUTHN_RP_ID` | Production only: the exact host passkeys are bound to, e.g. `x-rex.vercel.app`. Leave unset in Preview/Development. |
-| `WEBAUTHN_ORIGINS` | Optional comma-separated allowed origins. Defaults to `https://<WEBAUTHN_RP_ID>`, or the request's own origin when the RP ID is unset. |
+| `WEBAUTHN_RP_ID` | **Required in production**: the exact host passkeys are bound to, e.g. `x-rex.vercel.app`. Leave unset in Preview/Development. |
+| `WEBAUTHN_ORIGINS` | **Required in production**: comma-separated allowed origins, each `https://host[:port]` on `WEBAUTHN_RP_ID` or a subdomain of it, e.g. `https://x-rex.vercel.app`. Outside production it defaults to `https://<WEBAUTHN_RP_ID>`, or the request's own origin when the RP ID is unset. |
 | `WEBAUTHN_RP_NAME` | Optional display name in the passkey prompt (default `X-Rex`). |
 
 Passkeys also need Upstash Redis / Vercel KV (the same variables as the daily caps). Without Redis, or with a short password or secret, the sign-in endpoints return 503 and only invite codes work.
@@ -77,12 +77,12 @@ Passkeys also need Upstash Redis / Vercel KV (the same variables as the daily ca
 - Session cookies (`xrex_session`, 7 days; `xrex_step`, 5 minutes) are HMAC-signed, `HttpOnly`, `Secure`, `SameSite=Strict`. Sessions carry an epoch that changes when a recovery code is redeemed or a passkey is removed, which signs out every other session.
 - `/api/auth/*` POSTs must be same-origin. Login, passkey verification, setup-token and recovery attempts are each rate-limited per client IP (10, or 5 for setup and recovery, per 15 minutes). Failures return generic messages.
 
-**RP ID and origins.** Passkeys are bound to an exact host. In the Vercel **Production** environment, set `WEBAUTHN_RP_ID` to the production host (and add a custom domain to `WEBAUTHN_ORIGINS`/`WEBAUTHN_RP_ID` if you use one). Leave both unset for Preview and local development: the app then uses the request's own host, so `http://localhost:3000` works, and each preview URL needs its own enrollment. `vercel.app` itself is a public suffix and cannot be used as a shared RP ID. Use a separate Redis database for Preview so preview enrollments never touch production credentials.
+**RP ID and origins.** Passkeys are bound to an exact host. In production (`NODE_ENV=production` or `VERCEL_ENV=production`) both `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGINS` must be set and valid; otherwise every `/api/auth/*` request returns 503 with an error naming the missing variables, and existing passkey sessions stop unlocking paid routes. Production never derives them from request headers, and the same-origin check accepts only the pinned origins (whenever `WEBAUTHN_ORIGINS` is set, in any environment). Leave both unset for Preview and local development: the app then uses the request's own host, so `http://localhost:3000` works, and each preview URL needs its own enrollment. `vercel.app` itself is a public suffix and cannot be used as a shared RP ID. Use a separate Redis database for Preview so preview enrollments never touch production credentials.
 
 ### First-time setup (in this order)
 
 1. Set `OWNER_PASSWORD`, `SESSION_SECRET` and Upstash Redis / Vercel KV in Vercel.
-2. In Vercel → Production, add `WEBAUTHN_RP_ID=<your production host>` and a fresh `PASSKEY_SETUP_TOKEN` (for example `openssl rand -base64 32`). Keep the token in your password manager.
+2. In Vercel → Production, add `WEBAUTHN_RP_ID=<your production host>`, `WEBAUTHN_ORIGINS=https://<your production host>` and a fresh `PASSKEY_SETUP_TOKEN` (for example `openssl rand -base64 32`). Keep the token in your password manager.
 3. Deploy (or redeploy).
 4. Open the site, choose **Site owner? Sign in with a passkey**, enter the owner password, then the setup token, and create a passkey on this device.
 5. **Save the 10 recovery codes** shown next. They are displayed once only.

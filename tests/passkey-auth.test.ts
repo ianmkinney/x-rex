@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {NextRequest} from 'next/server';
 import {authRoute} from '../lib/server/auth-routes';
 import {SESSION_COOKIE,PRE_COOKIE,signedIn} from '../lib/server/auth';
-import {readPasskeys,relyingParty} from '../lib/server/passkeys';
+import {readPasskeys,relyingParty,relyingPartyConfigError} from '../lib/server/passkeys';
 import {withPaidGuard} from '../lib/paid-guard';
 import {POST as discover} from '../app/api/discover/route';
 import {GET as status} from '../app/api/status/route';
@@ -12,7 +12,7 @@ import {fakeRedis,softAuthenticator} from './webauthn-fixtures';
 
 const ORIGIN='https://xrex.test';
 const ENV={OWNER_PASSWORD:'test-password-not-for-deployment',SESSION_SECRET:'test-only-signing-key-not-a-real-secret',PASSKEY_SETUP_TOKEN:'test-only-setup-token-not-a-real-secret',UPSTASH_REDIS_REST_URL:'https://storage.example.test',UPSTASH_REDIS_REST_TOKEN:'test-only'};
-const RESET=[...Object.keys(ENV),'INVITE_CODES','PAID_FEATURES_ENABLED','PAID_DAILY_CAP_PER_IP','PAID_DAILY_CAP_GLOBAL','KV_REST_API_URL','KV_REST_API_TOKEN','WEBAUTHN_RP_ID','WEBAUTHN_ORIGINS','X_BEARER_TOKEN'];
+const RESET=[...Object.keys(ENV),'NODE_ENV','VERCEL_ENV','WEBAUTHN_RP_NAME','INVITE_CODES','PAID_FEATURES_ENABLED','PAID_DAILY_CAP_PER_IP','PAID_DAILY_CAP_GLOBAL','KV_REST_API_URL','KV_REST_API_TOKEN','WEBAUTHN_RP_ID','WEBAUTHN_ORIGINS','X_BEARER_TOKEN'];
 
 function browser(ip='203.0.113.1'){
  const jar=new Map<string,string>();
@@ -228,4 +228,46 @@ test('auth route rejects cross-origin POSTs and fails closed without configurati
  assert.equal((await authPost(post({origin:ORIGIN}),ctx('login'))).status,503,'no Redis, no passkeys');
  process.env.UPSTASH_REDIS_REST_URL=ENV.UPSTASH_REDIS_REST_URL;process.env.SESSION_SECRET='short';
  assert.equal((await authPost(post({origin:ORIGIN}),ctx('login'))).status,503,'weak SESSION_SECRET refuses to sign');
+}));
+
+test('production requires pinned WEBAUTHN_RP_ID and WEBAUTHN_ORIGINS and never derives them from headers',()=>withLab(async()=>{
+ const spoofed=new Request('https://xrex.test/api/auth/login',{headers:{host:'evil.example','x-forwarded-host':'evil.example','x-forwarded-proto':'https'}});
+ for(const prod of [{NODE_ENV:'production'},{VERCEL_ENV:'production'}]){
+  for(const partial of [{},{WEBAUTHN_RP_ID:'xrex.test'},{WEBAUTHN_ORIGINS:ORIGIN}]){
+   const env={...prod,...partial};
+   assert.match(relyingPartyConfigError(env)!,/set WEBAUTHN_RP_ID and WEBAUTHN_ORIGINS in production/);
+   assert.throws(()=>relyingParty(spoofed,env),(e:Error&{status?:number})=>e.status===503&&/WEBAUTHN_RP_ID/.test(e.message));
+  }
+  for(const bad of ['https://evil.example','https://xrex.test/path','xrex.test','https://notxrex.test'])
+   assert.match(relyingPartyConfigError({...prod,WEBAUTHN_RP_ID:'xrex.test',WEBAUTHN_ORIGINS:bad})!,/misconfigured/,bad);
+  const pinned={...prod,WEBAUTHN_RP_ID:'xrex.test',WEBAUTHN_ORIGINS:`${ORIGIN}, https://app.xrex.test`};
+  assert.equal(relyingPartyConfigError(pinned),null);
+  assert.deepEqual(relyingParty(spoofed,pinned),{rpID:'xrex.test',rpName:'X-Rex',origins:[ORIGIN,'https://app.xrex.test']},'Host headers are ignored');
+ }
+ assert.equal(relyingParty(spoofed,{}).rpID,'evil.example','outside production the host header is still used');
+
+ const ctx=(...path:string[])=>({params:Promise.resolve({path})});
+ const login=(url:string,origin:string)=>authPost(new Request(url,{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({password:ENV.OWNER_PASSWORD})}),ctx('login'));
+ process.env.VERCEL_ENV='production';
+ const missing=await login(`${ORIGIN}/api/auth/login`,ORIGIN);
+ assert.equal(missing.status,503);assert.match((await missing.json()).error,/WEBAUTHN_RP_ID and WEBAUTHN_ORIGINS/);
+ assert.equal((await browser().call('login',{password:ENV.OWNER_PASSWORD})).status,503,'authRoute fails closed too');
+ process.env.WEBAUTHN_RP_ID='xrex.test';process.env.WEBAUTHN_ORIGINS=ORIGIN;
+ assert.equal((await login(`${ORIGIN}/api/auth/login`,ORIGIN)).status,200);
+ assert.equal((await login('https://x-rex-git-preview.vercel.app/api/auth/login','https://x-rex-git-preview.vercel.app')).status,403,'a request whose Origin matches its own host is still rejected unless pinned');
+ const {b,key}=await enroll();
+ assert.equal(await b.signedIn(),true,'passkeys work end to end with the pinned relying party');
+ const evilKey=softAuthenticator('xrex.test','https://evil.example');
+ const attempt=await signIn(key);assert.equal((await attempt.verify(evilKey.get(attempt.options.challenge))).status,401);
+ delete process.env.WEBAUTHN_ORIGINS;
+ assert.equal(await b.signedIn(),false,'sessions stop authorizing if the pinned config is removed');
+}));
+
+test('sameOrigin compares against pinned origins whenever they are set',()=>withLab(async()=>{
+ const ctx={params:Promise.resolve({path:['login']})};
+ const post=(url:string,origin:string)=>authPost(new Request(url,{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({password:ENV.OWNER_PASSWORD})}),ctx);
+ assert.equal((await post('https://other.test/api/auth/login','https://other.test')).status,200,'unpinned dev: own origin');
+ process.env.WEBAUTHN_ORIGINS=ORIGIN;
+ assert.equal((await post('https://other.test/api/auth/login','https://other.test')).status,403,'pinned: own origin is not enough');
+ assert.equal((await post('https://other.test/api/auth/login',ORIGIN)).status,200);
 }));

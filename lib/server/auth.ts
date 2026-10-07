@@ -1,6 +1,6 @@
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {clientIp} from '../client-ip';
-import {readPasskeys,relyingParty,requestOrigin} from './passkeys';
+import {readPasskeys,relyingParty,relyingPartyConfigError} from './passkeys';
 import {incrementWindow,storageReady} from './store';
 
 export const SESSION_COOKIE='xrex_session',PRE_COOKIE='xrex_pre',STEP_COOKIE='xrex_step';
@@ -41,7 +41,7 @@ export const issueSession=(epoch:string)=>issue('session',SESSION_SECONDS,{e:epo
 export const session=(req:Request)=>{const t=read(req,SESSION_COOKIE,'session');return t&&t.e?{nonce:t.n,epoch:t.e}:null;};
 /** A valid signature is not enough: the session's epoch must match the passkey store, so recovery or removal revokes it. */
 export async function signedIn(req:Request){
- const s=session(req);if(!s||!storageReady())return false;
+ const s=session(req);if(!s||!storageReady()||relyingPartyConfigError())return false;
  const {epoch,credentials}=await readPasskeys();
  return credentials.length>0&&epoch!==''&&equal(s.epoch,epoch);
 }
@@ -53,5 +53,6 @@ export async function tooManyAttempts(req:Request,bucket:string,limit=10){
 }
 export function sameOrigin(req:Request){
  const origin=req.headers.get('origin');
- return Boolean(origin)&&(origin===requestOrigin(req).origin||relyingParty(req).origins.includes(origin!));
+ if(!origin)return false;
+ try{return relyingParty(req).origins.includes(origin);}catch{return false;}
 }

@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import type {AuthenticationResponseJSON,RegistrationResponseJSON} from '@simplewebauthn/server';
 import {PRE_COOKIE,PRE_AUTH_SECONDS,SESSION_COOKIE,SESSION_SECONDS,STEP_COOKIE,STEP_UP_SECONDS,authReady,checkPassword,cookieOptions,equal,issuePreAuth,issueSession,issueStepUp,preAuth,session,signedIn,steppedUp,tooManyAttempts} from './auth';
-import {AuthError,assertionOptions,listPasskeys,readPasskeys,recoveryGranted,redeemRecoveryCode,regenerateRecoveryCodes,registrationOptions,removePasskey,renamePasskey,verifyAssertion,verifyRegistration} from './passkeys';
+import {AuthError,assertionOptions,listPasskeys,readPasskeys,relyingPartyConfigError,recoveryGranted,redeemRecoveryCode,regenerateRecoveryCodes,registrationOptions,removePasskey,renamePasskey,verifyAssertion,verifyRegistration} from './passkeys';
 import {storageReady} from './store';
 
 const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
@@ -22,6 +22,7 @@ export async function authRoute(action:string,req:Request):Promise<Response|null
  if(!(post&&AUTH_ACTIONS.includes(action))&&!(SIGNED_IN.has(action)&&(post||action==='passkeys')))return null;
  if(action==='logout')return clear(reply({ok:true}),SESSION_COOKIE,STEP_COOKIE,PRE_COOKIE);
  if(!authReady()||!storageReady())return reply({error:'Passkey sign-in is not configured. Set OWNER_PASSWORD, SESSION_SECRET and Redis in Vercel first.'},503);
+ const rpError=relyingPartyConfigError();if(rpError)return reply({error:rpError},503);
  try{
   const me=await signedIn(req),s=session(req);
   if(SIGNED_IN.has(action)&&(!me||!s))return reply({error:'Sign in with your passkey first.'},401);
