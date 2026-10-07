@@ -11,7 +11,11 @@ const guarded=new WeakSet<Handler>();
 const json=(body:Record<string,unknown>,status:number,headers:Record<string,string>={})=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store',...headers}});
 
 export const isProduction=()=>process.env.NODE_ENV==='production'||process.env.VERCEL_ENV==='production';
-export function paidFeaturesEnabled(){return process.env.PAID_FEATURES_ENABLED?.trim().toLowerCase()!=='false';}
+/** On only for exactly "true" (any case). Unset defaults to on outside production; anything else, including typos, is off. */
+export function paidFeaturesEnabled(){
+ const value=process.env.PAID_FEATURES_ENABLED?.trim().toLowerCase();
+ return value==='true'||(!value&&!isProduction());
+}
 function inviteCodes(){return (process.env.INVITE_CODES||'').split(',').map(c=>c.trim()).filter(Boolean);}
 function digest(value:string){return createHash('sha256').update(value).digest();}
 function safeEqual(a:string,b:string){return timingSafeEqual(digest(a),digest(b));}

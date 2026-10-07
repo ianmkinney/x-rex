@@ -82,7 +82,7 @@ test('cookie secret changes the HMAC, so cookies cannot be computed without it',
 });
 
 test('production requires INVITE_COOKIE_SECRET of 32+ characters and never uses a built-in key',async()=>{
- const env=process.env as Record<string,string|undefined>;
+ const env=process.env as Record<string,string|undefined>;process.env.PAID_FEATURES_ENABLED='true';
  const devCookie=inviteToken(TEST_INVITE)!;
  assert.notEqual(devCookie,createHmac('sha256','x-rex-invite-v1').update(`invite:v1:${TEST_INVITE}`).digest('base64url'),'the old hard-coded key is gone');
  env.VERCEL_ENV='production';process.env.KV_REST_API_URL='https://kv.example.test';process.env.KV_REST_API_TOKEN='kv-test-token';
@@ -165,7 +165,7 @@ test('caps use Upstash/Vercel KV REST when configured and fail closed on errors'
 });
 
 test('production without Redis/KV fails closed with limits_unavailable; dev and previews keep the in-memory fallback',async()=>{
- const env=process.env as Record<string,string|undefined>;process.env.INVITE_COOKIE_SECRET='a-production-invite-secret-of-32+chars';
+ const env=process.env as Record<string,string|undefined>;process.env.PAID_FEATURES_ENABLED='true';process.env.INVITE_COOKIE_SECRET='a-production-invite-secret-of-32+chars';
  for(const [key,value] of [['NODE_ENV','production'],['VERCEL_ENV','production']]){
   env[key]=value;
   const r=await ok(fromIp('192.0.2.90'));assert.equal(r.status,503,key);assert.equal((await r.json()).code,'limits_unavailable');
@@ -188,6 +188,25 @@ test('kill switch: PAID_FEATURES_ENABLED=false returns 503 on every paid route, 
  assert.equal(providerCalls,0);
  assert.deepEqual(await (await status(invitedRequest('http://localhost/api/status'))).json(),{paidFeaturesEnabled:false,unlocked:true});
  process.env.PAID_FEATURES_ENABLED='true';assert.equal((await ok(invitedRequest('http://localhost/api/ai',{method:'POST',body:'{}'}))).status,200);
+
+});
+
+test('kill switch fails closed: only "true" enables paid features in production, and typos disable them everywhere',async()=>{
+ const env=process.env as Record<string,string|undefined>;
+ const status_=async()=>(await ok(invitedRequest('http://localhost/api/ai',{method:'POST',body:'{}'}))).status;
+ const cases:[string|undefined,string|undefined,number][]=[
+  [undefined,undefined,200],['',undefined,200],['true',undefined,200],[' TRUE ',undefined,200],['false',undefined,503],['ture',undefined,503],['1',undefined,503],['yes',undefined,503],
+  [undefined,'production',503],['',  'production',503],['ture','production',503],['on','production',503],['false','production',503],['True','production',200],
+ ];
+ process.env.KV_REST_API_URL='https://kv.example.test';process.env.KV_REST_API_TOKEN='kv-test-token';process.env.INVITE_COOKIE_SECRET='z'.repeat(32);
+ globalThis.fetch=async()=>Response.json([{result:1},{result:1}]);
+ for(const [value,vercelEnv,expected] of cases){
+  if(value===undefined)delete process.env.PAID_FEATURES_ENABLED;else process.env.PAID_FEATURES_ENABLED=value;
+  if(vercelEnv===undefined)delete env.VERCEL_ENV;else env.VERCEL_ENV=vercelEnv;
+  assert.equal(await status_(),expected,`PAID_FEATURES_ENABLED=${JSON.stringify(value)} VERCEL_ENV=${vercelEnv}`);
+ }
+ env.VERCEL_ENV='production';delete process.env.PAID_FEATURES_ENABLED;
+ assert.equal((await (await status(invitedRequest('http://localhost/api/status'))).json()).paidFeaturesEnabled,false,'the UI sees the default-off state');
 });
 
 test('clientIp trusts only the right-most forwarded entry and rejects junk',()=>{
