@@ -1,7 +1,8 @@
 import {NextRequest,NextResponse} from 'next/server';
-import {INVITE_ATTEMPTS_PER_IP,countInviteAttempt,isValidInviteCode,setInviteCookie,tooManyRequests} from '@/lib/paid-guard';
+import {INVITE_ATTEMPTS_PER_IP,countInviteAttempt,inviteSecret,isValidInviteCode,setInviteCookie,tooManyRequests} from '@/lib/paid-guard';
 const reply=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});
 export async function POST(request:NextRequest){
+ if(!inviteSecret())return reply({error:'Invite codes are not available on this deployment yet. Please try again later.',code:'invite_unavailable'},503);
  const raw=await request.text();if(raw.length>500)return reply({error:'Invite code is too long.'},413);
  let code:unknown;try{code=(JSON.parse(raw) as {code?:unknown})?.code;}catch{return reply({error:'Invalid invite request.'},400);}
  if(typeof code!=='string'||!code.trim()||code.length>200)return reply({error:'Enter your invite code.'},400);

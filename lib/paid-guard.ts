@@ -1,4 +1,4 @@
-import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
+import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {isIP} from 'node:net';
 import {NextResponse,type NextRequest} from 'next/server';
 
@@ -15,17 +15,26 @@ function inviteCodes(){return (process.env.INVITE_CODES||'').split(',').map(c=>c
 function digest(value:string){return createHash('sha256').update(value).digest();}
 function safeEqual(a:string,b:string){return timingSafeEqual(digest(a),digest(b));}
 
+export const MIN_INVITE_SECRET_LENGTH=32;
+// Dev/test only: a per-process key, so local invite cookies stop working on restart. Production never uses it.
+const devInviteSecret=randomBytes(32).toString('base64url');
+export function inviteSecret(){
+ const secret=process.env.INVITE_COOKIE_SECRET?.trim()||'';
+ if(isProduction())return secret.length>=MIN_INVITE_SECRET_LENGTH?secret:null;
+ return secret||devInviteSecret;
+}
 // The cookie holds an HMAC of the code, never the code itself. Removing a code from INVITE_CODES revokes its cookies.
-export function inviteToken(code:string){return createHmac('sha256',process.env.INVITE_COOKIE_SECRET?.trim()||'x-rex-invite-v1').update(`invite:v1:${code}`).digest('base64url');}
+export function inviteToken(code:string){const secret=inviteSecret();return secret?createHmac('sha256',secret).update(`invite:v1:${code}`).digest('base64url'):null;}
 export function isValidInviteCode(code:string){const input=code.trim();let match=false;for(const c of inviteCodes())if(safeEqual(c,input))match=true;return input.length>0&&match;}
 export function hasValidInvite(request:NextRequest){
  const value=request.cookies.get(INVITE_COOKIE)?.value;
  if(!value)return false;
- let match=false;for(const c of inviteCodes())if(safeEqual(inviteToken(c),value))match=true;
+ let match=false;for(const c of inviteCodes()){const token=inviteToken(c);if(token&&safeEqual(token,value))match=true;}
  return match;
 }
 export function setInviteCookie(response:NextResponse,code:string){
- response.cookies.set(INVITE_COOKIE,inviteToken(code.trim()),{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:INVITE_MAX_AGE});
+ const token=inviteToken(code.trim());if(!token)throw new Error('Invite cookies cannot be signed');
+ response.cookies.set(INVITE_COOKIE,token,{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:INVITE_MAX_AGE});
  return response;
 }
 

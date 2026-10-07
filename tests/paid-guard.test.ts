@@ -1,5 +1,6 @@
 import {test,beforeEach,afterEach} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHmac} from 'node:crypto';
 import {readFileSync,readdirSync} from 'node:fs';
 import {join,relative} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -38,7 +39,7 @@ const fromIp=(xff:string)=>invitedRequest('http://localhost/api/ai',{method:'POS
 
 test('gate: missing, invalid, raw-code and revoked cookies get 401 JSON without provider calls',async()=>{
  for(const route of paidRoutes){
-  for(const request of [anonymous(route.url,route.body),withCookie(route.url,route.body,'forged'),withCookie(route.url,route.body,TEST_INVITE),withCookie(route.url,route.body,inviteToken('not-a-listed-code'))]){
+  for(const request of [anonymous(route.url,route.body),withCookie(route.url,route.body,'forged'),withCookie(route.url,route.body,TEST_INVITE),withCookie(route.url,route.body,inviteToken('not-a-listed-code')!)]){
    const response=await route.handler(request);
    assert.equal(response.status,401,route.name);
    const data=await response.json();assert.equal(data.code,'invite_required');assert.match(data.error,/invite code/);
@@ -53,7 +54,7 @@ test('gate fails closed when INVITE_CODES is unset or empty',async()=>{
  for(const value of [undefined,'',' , ']){
   if(value===undefined)delete process.env.INVITE_CODES;else process.env.INVITE_CODES=value;
   assert.equal((await ok(invitedRequest('http://localhost/api/ai',{method:'POST',body:'{}'}))).status,401);
-  assert.equal((await ok(withCookie('http://localhost/api/ai',{},inviteToken('')))).status,401);
+  assert.equal((await ok(withCookie('http://localhost/api/ai',{},inviteToken('')!))).status,401);
   const r=await invite(anonymous('http://localhost/api/invite',{code:TEST_INVITE}));assert.equal(r.status,401);assert.equal(r.headers.get('set-cookie'),null);
  }
 });
@@ -80,6 +81,26 @@ test('cookie secret changes the HMAC, so cookies cannot be computed without it',
  assert.notEqual(inviteToken(TEST_INVITE),unsigned);
 });
 
+test('production requires INVITE_COOKIE_SECRET of 32+ characters and never uses a built-in key',async()=>{
+ const env=process.env as Record<string,string|undefined>;
+ const devCookie=inviteToken(TEST_INVITE)!;
+ assert.notEqual(devCookie,createHmac('sha256','x-rex-invite-v1').update(`invite:v1:${TEST_INVITE}`).digest('base64url'),'the old hard-coded key is gone');
+ env.VERCEL_ENV='production';process.env.KV_REST_API_URL='https://kv.example.test';process.env.KV_REST_API_TOKEN='kv-test-token';
+ globalThis.fetch=async()=>Response.json([{result:1},{result:1}]);
+ for(const secret of [undefined,'','x'.repeat(31)]){
+  if(secret===undefined)delete process.env.INVITE_COOKIE_SECRET;else process.env.INVITE_COOKIE_SECRET=secret;
+  assert.equal(inviteToken(TEST_INVITE),null);
+  const r=await invite(anonymous('http://localhost/api/invite',{code:TEST_INVITE}));
+  assert.equal(r.status,503);assert.equal((await r.json()).code,'invite_unavailable');assert.equal(r.headers.get('set-cookie'),null);
+  assert.equal((await ok(withCookie('http://localhost/api/ai',{},devCookie))).status,401,'cookies signed with another key are rejected');
+ }
+ process.env.INVITE_COOKIE_SECRET='y'.repeat(32);
+ const good=await invite(anonymous('http://localhost/api/invite',{code:TEST_INVITE}));assert.equal(good.status,200);
+ const value=(good.headers.get('set-cookie')||'').match(new RegExp(`${INVITE_COOKIE}=([^;]+)`))?.[1]||'';
+ assert.equal(value,createHmac('sha256','y'.repeat(32)).update(`invite:v1:${TEST_INVITE}`).digest('base64url'));
+ assert.equal((await ok(withCookie('http://localhost/api/ai',{},value))).status,200);
+});
+
 test('invite endpoint limits guessing per IP',async()=>{
  const attempt=()=>invite(anonymous('http://localhost/api/invite',{code:'guess'},{'x-forwarded-for':'203.0.113.9'}));
  for(let i=0;i<INVITE_ATTEMPTS_PER_IP;i++)assert.equal((await attempt()).status,401);
@@ -87,7 +108,7 @@ test('invite endpoint limits guessing per IP',async()=>{
 });
 
 test('wrong invite cookies on paid routes share the invite attempt limit',async()=>{
- const guess=(i:number)=>ok(anonymous('http://localhost/api/ai',{},{'x-forwarded-for':'203.0.113.10',cookie:`${INVITE_COOKIE}=${inviteToken(`guess-${i}`)}`}));
+ const guess=(i:number)=>ok(anonymous('http://localhost/api/ai',{},{'x-forwarded-for':'203.0.113.10',cookie:`${INVITE_COOKIE}=${inviteToken(`guess-${i}`)!}`}));
  for(let i=0;i<INVITE_ATTEMPTS_PER_IP;i++)assert.equal((await guess(i)).status,401);
  assert.equal((await guess(99)).status,429);
  assert.equal((await ok(anonymous('http://localhost/api/ai',{},{'x-forwarded-for':'203.0.113.11'}))).status,401,'requests without a cookie are not counted as guesses');
@@ -144,7 +165,7 @@ test('caps use Upstash/Vercel KV REST when configured and fail closed on errors'
 });
 
 test('production without Redis/KV fails closed with limits_unavailable; dev and previews keep the in-memory fallback',async()=>{
- const env=process.env as Record<string,string|undefined>;
+ const env=process.env as Record<string,string|undefined>;process.env.INVITE_COOKIE_SECRET='a-production-invite-secret-of-32+chars';
  for(const [key,value] of [['NODE_ENV','production'],['VERCEL_ENV','production']]){
   env[key]=value;
   const r=await ok(fromIp('192.0.2.90'));assert.equal(r.status,503,key);assert.equal((await r.json()).code,'limits_unavailable');
