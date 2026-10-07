@@ -43,9 +43,21 @@ For local development, copy `.env.example` to ignored `.env.local` and replace t
 
 The writing-model picker loads the live OpenRouter text-model catalog and defaults to `~anthropic/claude-sonnet-latest`. The selected ID is forwarded to OpenRouter for drafts and AI archetypes; credentials remain server-only. The optional `OPENROUTER_MODEL` sets the fallback for API calls without a selection and the screenshot model (use a vision-capable model). OpenAI API keys cannot directly call Anthropic Sonnet. Optional AI operations are not deterministic; accepted text and profiles become fixed inputs to deterministic scoring.
 
+## Paid feature protection
+
+Every route that spends the owner's OpenRouter or X API credit is wrapped in one shared guard, `withPaidGuard` in `lib/paid-guard.ts`: `POST /api/ai` (drafts, AI archetypes, screenshot transcription, X-Rex help chat), `POST /api/profile` (profile import, writer-voice import, "Write like @username"), and `POST /api/discover` (creator discovery). Deterministic scoring, prompt building, and the public `/api/models` catalog make no paid calls and stay open. The guard checks, in order:
+
+1. **Kill switch.** `PAID_FEATURES_ENABLED=false` makes every paid route return 503 JSON. The UI reads `GET /api/status`, shows a notice, and disables the paid buttons.
+2. **Invite gate.** `INVITE_CODES` is a comma-separated list of codes. Users enter a code in the invite card; `POST /api/invite` checks it on the server and sets an `httpOnly`, `secure`, `sameSite=lax` cookie that holds an HMAC of the code, never the raw code. Without a valid cookie, paid routes return 401 JSON. If `INVITE_CODES` is unset or empty, paid routes stay locked. Removing a code revokes its cookies. Invite attempts are limited to 20 per IP per UTC day.
+3. **Daily caps.** `PAID_DAILY_CAP_PER_IP` (default 20) and `PAID_DAILY_CAP_GLOBAL` (default 300) count paid requests per UTC day. Over a cap, routes return 429 JSON with `Retry-After` (seconds until UTC midnight). Counters use Upstash Redis / Vercel KV when `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` or `KV_REST_API_URL` + `KV_REST_API_TOKEN` are set. Otherwise they fall back to in-memory counters, which reset on cold starts and are not shared between serverless instances, so configure Redis in production. If Redis is configured but unreachable, paid routes return 503 rather than run uncapped.
+
+The client IP is the right-most `X-Forwarded-For` entry, which Vercel sets; IPv6 addresses are grouped by /64. Outside Vercel, run behind a proxy that overwrites `X-Forwarded-For`, or the per-IP cap can be spoofed (the global cap still applies). Optionally set `INVITE_COOKIE_SECRET` to a long random value so cookies cannot be computed from a known code; changing it signs everyone out.
+
+> **MANUAL STEP (Ian):** set a hard spend limit on the OpenRouter API key in the OpenRouter dashboard (Settings → API Keys → edit key → credit limit), and a usage cap on the X developer account. The caps above limit request counts, not dollars.
+
 ## Deploy to Vercel
 
-Connect `ianmkinney/x-rex` as a Next.js project, with the repository root as the root directory. Set the two server secrets above to enable AI and profile import; local analysis and prompt generation work while placeholders remain. Production branch: `main`.
+Connect `ianmkinney/x-rex` as a Next.js project, with the repository root as the root directory. Set the two server secrets above and `INVITE_CODES` (plus Redis/KV for shared caps) to enable AI and profile import; local analysis and prompt generation work while placeholders remain. Production branch: `main`.
 
 The project uses the user-selected personal repository `ianmkinney/x-rex`. The original private organization repository was replaced at the user’s request before deployment.
 
