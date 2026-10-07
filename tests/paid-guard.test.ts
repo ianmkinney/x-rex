@@ -72,7 +72,7 @@ test('invite endpoint validates server-side and sets an httpOnly, secure, lax HM
  assert.ok(value&&!value.includes(TEST_INVITE),'cookie must not contain the raw invite code');
  assert.equal(value,inviteToken(TEST_INVITE));
  const before=await (await status(anonymous('http://localhost/api/status',{}))).json();assert.equal(before.unlocked,false);
- const after=await (await status(withCookie('http://localhost/api/status',{},value))).json();assert.deepEqual(after,{paidFeaturesEnabled:true,unlocked:true});
+ const after=await (await status(withCookie('http://localhost/api/status',{},value))).json();assert.deepEqual(after,{paidFeaturesEnabled:true,unlocked:true,owner:false});
  assert.equal((await ok(withCookie('http://localhost/api/ai',{},value))).status,200);
 });
 
@@ -186,7 +186,7 @@ test('kill switch: PAID_FEATURES_ENABLED=false returns 503 on every paid route, 
   assert.equal(response.status,503,route.name);const data=await response.json();assert.equal(data.code,'paid_disabled');assert.match(data.error,/paused/);
  }
  assert.equal(providerCalls,0);
- assert.deepEqual(await (await status(invitedRequest('http://localhost/api/status'))).json(),{paidFeaturesEnabled:false,unlocked:true});
+ assert.deepEqual(await (await status(invitedRequest('http://localhost/api/status'))).json(),{paidFeaturesEnabled:false,unlocked:true,owner:false});
  process.env.PAID_FEATURES_ENABLED='true';assert.equal((await ok(invitedRequest('http://localhost/api/ai',{method:'POST',body:'{}'}))).status,200);
 
 });
