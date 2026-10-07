@@ -9,6 +9,7 @@ type Handler=(request:NextRequest)=>Promise<Response>;
 const guarded=new WeakSet<Handler>();
 const json=(body:Record<string,unknown>,status:number,headers:Record<string,string>={})=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store',...headers}});
 
+export const isProduction=()=>process.env.NODE_ENV==='production'||process.env.VERCEL_ENV==='production';
 export function paidFeaturesEnabled(){return process.env.PAID_FEATURES_ENABLED?.trim().toLowerCase()!=='false';}
 function inviteCodes(){return (process.env.INVITE_CODES||'').split(',').map(c=>c.trim()).filter(Boolean);}
 function digest(value:string){return createHash('sha256').update(value).digest();}
@@ -64,7 +65,13 @@ function redisStore(url:string,token:string):CounterStore{return {async incr(key
  if(typeof result!=='number')throw new Error('Counter store returned no count');
  return result;
 }};}
-export function counterStore():CounterStore{const config=redisConfig();return config?redisStore(config.url,config.token):memoryStore;}
+// In-memory counters are per instance and reset on cold start, so production must use shared Redis/KV.
+export function counterStore():CounterStore{
+ const config=redisConfig();
+ if(config)return redisStore(config.url,config.token);
+ if(isProduction())throw new Error('Redis/KV is required for usage limits in production');
+ return memoryStore;
+}
 export function counterBackend(){return redisConfig()?'redis':'memory';}
 
 function utcDay(now=Date.now()){return new Date(now).toISOString().slice(0,10);}
@@ -82,8 +89,9 @@ export async function paidAccessDenial(request:NextRequest):Promise<Response|nul
   if(request.cookies.has(INVITE_COOKIE)&&await countInviteAttempt(request).catch(()=>0)>INVITE_ATTEMPTS_PER_IP)return tooManyRequests('Too many invite attempts today. Please try again after midnight UTC.');
   return json({error:'This feature needs an invite code. Enter yours at the top of the page to unlock AI and X features. Free post scoring works without one.',code:'invite_required'},401);
  }
- const perIp=cap('PAID_DAILY_CAP_PER_IP',20),global=cap('PAID_DAILY_CAP_GLOBAL',300),day=utcDay(),store=counterStore();
+ const perIp=cap('PAID_DAILY_CAP_PER_IP',20),global=cap('PAID_DAILY_CAP_GLOBAL',300),day=utcDay();
  try{
+  const store=counterStore();
   if(await store.incr(`xrex:paid:${day}:ip:${clientIp(request)}`,COUNTER_TTL)>perIp)return tooManyRequests(`You’ve used today’s ${perIp} AI and X requests. Your limit resets at midnight UTC.`);
   if(await store.incr(`xrex:paid:${day}:global`,COUNTER_TTL)>global)return tooManyRequests('X-Rex has reached today’s shared limit for AI and X requests. Please try again after midnight UTC.');
  }catch{

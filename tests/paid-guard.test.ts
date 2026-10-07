@@ -12,7 +12,7 @@ import {POST as profile} from '../app/api/profile/route';
 import {POST as invite} from '../app/api/invite/route';
 import {GET as status} from '../app/api/status/route';
 
-const ENV_KEYS=['INVITE_CODES','INVITE_COOKIE_SECRET','PAID_FEATURES_ENABLED','PAID_DAILY_CAP_PER_IP','PAID_DAILY_CAP_GLOBAL','UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN','KV_REST_API_URL','KV_REST_API_TOKEN','OPENROUTER_API_KEY','X_BEARER_TOKEN'];
+const ENV_KEYS=['NODE_ENV','VERCEL_ENV','INVITE_CODES','INVITE_COOKIE_SECRET','PAID_FEATURES_ENABLED','PAID_DAILY_CAP_PER_IP','PAID_DAILY_CAP_GLOBAL','UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN','KV_REST_API_URL','KV_REST_API_TOKEN','OPENROUTER_API_KEY','X_BEARER_TOKEN'];
 let savedEnv:Record<string,string|undefined>={};
 const originalFetch=globalThis.fetch;
 let providerCalls=0;
@@ -141,6 +141,21 @@ test('caps use Upstash/Vercel KV REST when configured and fail closed on errors'
  count=500;assert.equal((await ok(fromIp('192.0.2.78'))).status,429);
  globalThis.fetch=async()=>new Response('down',{status:500});
  const failed=await ok(fromIp('192.0.2.79'));assert.equal(failed.status,503);assert.equal((await failed.json()).code,'limits_unavailable');
+});
+
+test('production without Redis/KV fails closed with limits_unavailable; dev and previews keep the in-memory fallback',async()=>{
+ const env=process.env as Record<string,string|undefined>;
+ for(const [key,value] of [['NODE_ENV','production'],['VERCEL_ENV','production']]){
+  env[key]=value;
+  const r=await ok(fromIp('192.0.2.90'));assert.equal(r.status,503,key);assert.equal((await r.json()).code,'limits_unavailable');
+  assert.equal((await invite(anonymous('http://localhost/api/invite',{code:TEST_INVITE}))).status,503,'invite attempts cannot be counted either');
+  delete env[key];
+ }
+ env.VERCEL_ENV='preview';assert.equal((await ok(fromIp('192.0.2.90'))).status,200,'preview deployments are not production');
+ delete env.VERCEL_ENV;assert.equal((await ok(fromIp('192.0.2.90'))).status,200,'dev/test uses the in-memory fallback');
+ env.VERCEL_ENV='production';process.env.KV_REST_API_URL='https://kv.example.test';process.env.KV_REST_API_TOKEN='kv-test-token';
+ globalThis.fetch=async()=>Response.json([{result:1},{result:1}]);
+ assert.equal((await ok(fromIp('192.0.2.90'))).status,200,'production with KV configured works');
 });
 
 test('kill switch: PAID_FEATURES_ENABLED=false returns 503 on every paid route, even with a valid invite',async()=>{
