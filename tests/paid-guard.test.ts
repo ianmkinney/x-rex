@@ -86,6 +86,13 @@ test('invite endpoint limits guessing per IP',async()=>{
  const blocked=await attempt();assert.equal(blocked.status,429);assert.ok(Number(blocked.headers.get('retry-after'))>0);
 });
 
+test('wrong invite cookies on paid routes share the invite attempt limit',async()=>{
+ const guess=(i:number)=>ok(anonymous('http://localhost/api/ai',{},{'x-forwarded-for':'203.0.113.10',cookie:`${INVITE_COOKIE}=${inviteToken(`guess-${i}`)}`}));
+ for(let i=0;i<INVITE_ATTEMPTS_PER_IP;i++)assert.equal((await guess(i)).status,401);
+ assert.equal((await guess(99)).status,429);
+ assert.equal((await ok(anonymous('http://localhost/api/ai',{},{'x-forwarded-for':'203.0.113.11'}))).status,401,'requests without a cookie are not counted as guesses');
+});
+
 test('caps: per-IP daily cap returns 429 with Retry-After, other IPs unaffected',async()=>{
  process.env.PAID_DAILY_CAP_PER_IP='2';
  assert.equal((await ok(fromIp('198.51.100.1'))).status,200);

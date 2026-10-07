@@ -77,7 +77,11 @@ export function tooManyRequests(error:string){const retry=secondsUntilUtcMidnigh
 
 export async function paidAccessDenial(request:NextRequest):Promise<Response|null>{
  if(!paidFeaturesEnabled())return json({error:'AI and X features are paused by the site owner right now. Free post scoring still works.',code:'paid_disabled'},503);
- if(!hasValidInvite(request))return json({error:'This feature needs an invite code. Enter yours at the top of the page to unlock AI and X features. Free post scoring works without one.',code:'invite_required'},401);
+ if(!hasValidInvite(request)){
+  // A wrong cookie is an invite guess (cookies for a known code can be computed), so it shares the invite attempt limit.
+  if(request.cookies.has(INVITE_COOKIE)&&await countInviteAttempt(request).catch(()=>0)>INVITE_ATTEMPTS_PER_IP)return tooManyRequests('Too many invite attempts today. Please try again after midnight UTC.');
+  return json({error:'This feature needs an invite code. Enter yours at the top of the page to unlock AI and X features. Free post scoring works without one.',code:'invite_required'},401);
+ }
  const perIp=cap('PAID_DAILY_CAP_PER_IP',20),global=cap('PAID_DAILY_CAP_GLOBAL',300),day=utcDay(),store=counterStore();
  try{
   if(await store.incr(`xrex:paid:${day}:ip:${clientIp(request)}`,COUNTER_TTL)>perIp)return tooManyRequests(`You’ve used today’s ${perIp} AI and X requests. Your limit resets at midnight UTC.`);
