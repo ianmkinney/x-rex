@@ -1,6 +1,7 @@
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
-import {isIP} from 'node:net';
 import {NextResponse,type NextRequest} from 'next/server';
+import {UNKNOWN_IP,clientIp} from './client-ip';
+export {clientIp};
 
 export const INVITE_COOKIE='xrex_invite';
 export const INVITE_MAX_AGE=60*60*24*30;
@@ -38,21 +39,6 @@ export function setInviteCookie(response:NextResponse,code:string){
  return response;
 }
 
-// Only the right-most X-Forwarded-For entry is written by the platform proxy (Vercel overwrites the header);
-// left-most entries are client-controlled. IPv6 is bucketed by /64 so one host cannot rotate addresses.
-export function clientIp(request:Request){
- const candidate=request.headers.get('x-forwarded-for')?.split(',').map(s=>s.trim()).filter(Boolean).at(-1)||'';
- const version=isIP(candidate);
- if(version===4)return candidate;
- if(version!==6)return 'unknown';
- const mapped=candidate.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
- if(mapped)return mapped[1];
- const [head,tail]=candidate.toLowerCase().split('::');
- const h=head?head.split(':'):[],t=tail?tail.split(':'):[];
- const groups=tail===undefined?h:[...h,...Array(Math.max(0,8-h.length-t.length)).fill('0'),...t];
- return `${groups.slice(0,4).map(g=>parseInt(g,16).toString(16)).join(':')}::/64`;
-}
-
 export type CounterStore={incr(key:string,ttlSeconds:number):Promise<number>};
 let memoryDay='';
 const memory=new Map<string,number>();
@@ -87,6 +73,8 @@ function utcDay(now=Date.now()){return new Date(now).toISOString().slice(0,10);}
 export function secondsUntilUtcMidnight(now=Date.now()){const d=new Date(now);return Math.max(1,Math.ceil((Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1)-now)/1000));}
 function cap(name:string,fallback:number){const raw=process.env[name]?.trim();const value=raw?Number(raw):NaN;return Number.isInteger(value)&&value>=0?value:fallback;}
 const COUNTER_TTL=60*60*48;
+// Requests without any usable client IP share one bucket, so it gets a much smaller cap than a single known IP.
+export const UNKNOWN_IP_DAILY_CAP=5;
 
 export async function countInviteAttempt(request:NextRequest){return counterStore().incr(`xrex:invite:${utcDay()}:${clientIp(request)}`,COUNTER_TTL);}
 export function tooManyRequests(error:string){const retry=secondsUntilUtcMidnight();return json({error,code:'rate_limited',retryAfterSeconds:retry},429,{'Retry-After':String(retry)});}
@@ -100,8 +88,11 @@ export async function paidAccessDenial(request:NextRequest):Promise<Response|nul
  }
  const perIp=cap('PAID_DAILY_CAP_PER_IP',20),global=cap('PAID_DAILY_CAP_GLOBAL',300),day=utcDay();
  try{
-  const store=counterStore();
-  if(await store.incr(`xrex:paid:${day}:ip:${clientIp(request)}`,COUNTER_TTL)>perIp)return tooManyRequests(`You’ve used today’s ${perIp} AI and X requests. Your limit resets at midnight UTC.`);
+  const store=counterStore(),ip=clientIp(request);
+  if(ip===UNKNOWN_IP){
+   const limit=Math.min(perIp,UNKNOWN_IP_DAILY_CAP);
+   if(await store.incr(`xrex:paid:${day}:unknown`,COUNTER_TTL)>limit)return tooManyRequests(`We couldn’t identify your network, so a smaller shared limit of ${limit} AI and X requests applies today. It resets at midnight UTC.`);
+  }else if(await store.incr(`xrex:paid:${day}:ip:${ip}`,COUNTER_TTL)>perIp)return tooManyRequests(`You’ve used today’s ${perIp} AI and X requests. Your limit resets at midnight UTC.`);
   if(await store.incr(`xrex:paid:${day}:global`,COUNTER_TTL)>global)return tooManyRequests('X-Rex has reached today’s shared limit for AI and X requests. Please try again after midnight UTC.');
  }catch{
   return json({error:'Usage limits can’t be checked right now, so AI and X features are paused. Please try again shortly.',code:'limits_unavailable'},503);

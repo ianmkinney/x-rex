@@ -6,7 +6,7 @@ import {join,relative} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {NextRequest} from 'next/server';
 import {TEST_INVITE,invitedRequest} from './invite-helper';
-import {INVITE_ATTEMPTS_PER_IP,INVITE_COOKIE,clientIp,inviteToken,isPaidGuarded,resetMemoryStore,withPaidGuard} from '../lib/paid-guard';
+import {INVITE_ATTEMPTS_PER_IP,INVITE_COOKIE,UNKNOWN_IP_DAILY_CAP,clientIp,inviteToken,isPaidGuarded,resetMemoryStore,withPaidGuard} from '../lib/paid-guard';
 import {POST as ai} from '../app/api/ai/route';
 import {POST as discover} from '../app/api/discover/route';
 import {POST as profile} from '../app/api/profile/route';
@@ -196,6 +196,38 @@ test('clientIp trusts only the right-most forwarded entry and rejects junk',()=>
  assert.equal(ip(),'unknown');assert.equal(ip('not-an-ip'),'unknown');assert.equal(ip('203.0.113.5, ../../etc'),'unknown');
  assert.equal(ip('::ffff:203.0.113.5'),'203.0.113.5');
  assert.equal(ip('2001:DB8:0001:0002:3:4:5:6'),'2001:db8:1:2::/64');
+});
+
+test('clientIp prefers x-vercel-forwarded-for, then x-real-ip, then the right-most X-Forwarded-For entry',()=>{
+ const ip=(headers:Record<string,string>)=>clientIp(new Request('http://localhost',{headers}));
+ const all={'x-vercel-forwarded-for':'198.51.100.1','x-real-ip':'198.51.100.2','x-forwarded-for':'10.0.0.1, 198.51.100.3'};
+ assert.equal(ip(all),'198.51.100.1');
+ assert.equal(ip({...all,'x-vercel-forwarded-for':''}),'198.51.100.2');
+ assert.equal(ip({'x-real-ip':'198.51.100.2','x-forwarded-for':'198.51.100.3'}),'198.51.100.2');
+ assert.equal(ip({'x-forwarded-for':'10.0.0.1, 198.51.100.3'}),'198.51.100.3');
+ assert.equal(ip({'x-vercel-forwarded-for':'garbage','x-real-ip':'198.51.100.2'}),'198.51.100.2','invalid values fall through to the next header');
+ assert.equal(ip({'x-vercel-forwarded-for':'2001:db8:1:2::99'}),'2001:db8:1:2::/64');
+ assert.equal(ip({}),'unknown');
+});
+
+test('caps: changing X-Forwarded-For does not escape the x-vercel-forwarded-for bucket',async()=>{
+ process.env.PAID_DAILY_CAP_PER_IP='1';
+ const req=(xff:string)=>invitedRequest('http://localhost/api/ai',{method:'POST',headers:{'x-vercel-forwarded-for':'198.51.100.40','x-forwarded-for':xff},body:'{}'});
+ assert.equal((await ok(req('192.0.2.1'))).status,200);
+ assert.equal((await ok(req('192.0.2.2'))).status,429);
+});
+
+test('caps: requests without a usable IP share a stricter unknown bucket that also counts toward the global cap',async()=>{
+ const unknown=()=>invitedRequest('http://localhost/api/ai',{method:'POST',headers:{'x-forwarded-for':'not-an-ip'},body:'{}'});
+ for(let i=0;i<UNKNOWN_IP_DAILY_CAP;i++)assert.equal((await ok(unknown())).status,200);
+ const capped=await ok(unknown());assert.equal(capped.status,429);assert.match((await capped.json()).error,/couldn’t identify your network/);
+ assert.equal((await ok(fromIp('198.51.100.50'))).status,200,'known IPs keep their normal cap');
+ resetMemoryStore();process.env.PAID_DAILY_CAP_GLOBAL='2';
+ assert.equal((await ok(unknown())).status,200);assert.equal((await ok(fromIp('198.51.100.51'))).status,200);
+ assert.equal((await ok(fromIp('198.51.100.52'))).status,429,'unknown-bucket calls count toward the global cap');
+ resetMemoryStore();delete process.env.PAID_DAILY_CAP_GLOBAL;process.env.PAID_DAILY_CAP_PER_IP='2';
+ for(let i=0;i<2;i++)assert.equal((await ok(unknown())).status,200);
+ assert.equal((await ok(unknown())).status,429,'the unknown cap never exceeds the per-IP cap');
 });
 
 const PAID_MARKERS=/env(\.|\[['"`])(OPENROUTER_API_KEY|X_BEARER_TOKEN)|https:\/\/openrouter\.ai\/api\/v1\/(?!models)|https:\/\/api\.(x|twitter)\.com/;
