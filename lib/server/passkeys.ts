@@ -21,12 +21,21 @@ export async function readPasskeys():Promise<PasskeyDoc>{const raw=await redis([
 const update=<T>(fn:(d:PasskeyDoc)=>T)=>mutateKey(KEY,fresh,fn);
 export const listPasskeys=(d:PasskeyDoc)=>d.credentials.map(({id,name,createdAt,lastUsedAt,deviceType,backedUp})=>({id,name,createdAt,lastUsedAt,deviceType,backedUp}));
 
+/** The browser-facing origin. `next start` reports its bind address (e.g. 0.0.0.0) in req.url, while the proxy-set host headers carry what the browser used. */
+export function requestOrigin(req:Request){
+ const url=new URL(req.url);
+ const host=(req.headers.get('x-forwarded-host')||req.headers.get('host')||'').split(',')[0].trim();
+ const proto=(req.headers.get('x-forwarded-proto')||'').split(',')[0].trim();
+ if(/^[A-Za-z0-9.-]+(:\d{1,5})?$/.test(host))url.host=host;
+ if(proto==='http'||proto==='https')url.protocol=`${proto}:`;
+ return url;
+}
 /**
  * RP ID and allowed origins. Production should pin WEBAUTHN_RP_ID / WEBAUTHN_ORIGINS; otherwise the request host is used,
  * which suits local dev and per-URL Vercel previews (passkeys are bound to the exact host, so each preview enrolls separately).
  */
 export function relyingParty(req:Request,env:Record<string,string|undefined>=process.env){
- const url=new URL(req.url),pinned=env.WEBAUTHN_RP_ID?.trim();
+ const url=requestOrigin(req),pinned=env.WEBAUTHN_RP_ID?.trim();
  const origins=(env.WEBAUTHN_ORIGINS??'').split(',').map(s=>s.trim().replace(/\/$/,'')).filter(Boolean);
  return {rpID:pinned||url.hostname,rpName:env.WEBAUTHN_RP_NAME?.trim()||'X-Rex',origins:origins.length?origins:[pinned?`https://${pinned}`:url.origin]};
 }

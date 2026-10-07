@@ -1,6 +1,6 @@
 import {createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {clientIp} from '../client-ip';
-import {readPasskeys,relyingParty} from './passkeys';
+import {readPasskeys,relyingParty,requestOrigin} from './passkeys';
 import {incrementWindow,storageReady} from './store';
 
 export const SESSION_COOKIE='xrex_session',PRE_COOKIE='xrex_pre',STEP_COOKIE='xrex_step';
@@ -51,5 +51,5 @@ export async function tooManyAttempts(req:Request,bucket:string,limit=10){
 }
 export function sameOrigin(req:Request){
  const origin=req.headers.get('origin');
- return Boolean(origin)&&(origin===new URL(req.url).origin||relyingParty(req).origins.includes(origin!));
+ return Boolean(origin)&&(origin===requestOrigin(req).origin||relyingParty(req).origins.includes(origin!));
 }

@@ -154,6 +154,9 @@ test('relying party is pinned by env in production and derived from the host oth
  assert.deepEqual(relyingParty(req,{WEBAUTHN_RP_ID:'x-rex.vercel.app'}).origins,['https://x-rex.vercel.app']);
  assert.deepEqual(relyingParty(req,{WEBAUTHN_RP_ID:'example.com',WEBAUTHN_ORIGINS:'https://example.com/, https://app.example.com'}).origins,['https://example.com','https://app.example.com']);
  assert.equal(relyingParty(new Request('http://localhost:3000/api/auth/login'),{}).rpID,'localhost');
+ const bound=new Request('http://0.0.0.0:3000/api/auth/login',{headers:{host:'localhost:3000','x-forwarded-host':'localhost:3000','x-forwarded-proto':'http'}});
+ assert.deepEqual(relyingParty(bound,{}),{rpID:'localhost',rpName:'X-Rex',origins:['http://localhost:3000']},'next start reports its bind address in req.url');
+ assert.equal(relyingParty(new Request('http://0.0.0.0:3000/',{headers:{host:'evil.example/path'}}),{}).rpID,'0.0.0.0','malformed host headers are ignored');
 });
 
 test('session cookies are HttpOnly, Secure, SameSite=Strict and signed; forged or swapped tokens are rejected',()=>withLab(async()=>{
