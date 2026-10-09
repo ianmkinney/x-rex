@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {draftFixture} from './draft-fixture';
-test.beforeEach(async({context})=>{await context.addCookies([{name:'xrex_tour_v1',value:'done',url:'http://localhost:3000'}]);});
+import {TOUR_STORAGE_KEY} from '../../lib/tour';
+test.beforeEach(async({context})=>{await context.addInitScript(key=>localStorage.setItem(key,'done'),TOUR_STORAGE_KEY);});
 test('analysis, score overrides, eligibility, custom audiences, and reverse brief',async({page},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');
@@ -32,7 +33,7 @@ test('analysis, score overrides, eligibility, custom audiences, and reverse brie
 });
 test('file import, API validation, and server credential UI',async({page,request},testInfo)=>{
  await page.goto('/');
- await page.locator('input[type=file]').setInputFiles({name:'post.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({text:'Tennis players and soccer fans have a match today.'}))});
+ await page.locator('input[type=file][accept*="image/png"]').setInputFiles({name:'post.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({text:'Tennis players and soccer fans have a match today.'}))});
  await expect(page.getByLabel('Post text')).toHaveValue(/Tennis players/);
  await page.getByRole('button',{name:'Analyze audience fit'}).click();
  await expect(page.locator('.audience-row').first()).toContainText('Sports fans');

@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {draftFixture} from './draft-fixture';
-test.beforeEach(async({context})=>{await context.addCookies([{name:'xrex_tour_v1',value:'done',url:'http://localhost:3000'}]);});
+import {TOUR_STORAGE_KEY} from '../../lib/tour';
+test.beforeEach(async({context})=>{await context.addInitScript(key=>localStorage.setItem(key,'done'),TOUR_STORAGE_KEY);});
 test('model choice and separated posts support copy and X handoff in both workflows',async({page},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async(text:string)=>{(window as unknown as {copied:string}).copied=text;}}}));
