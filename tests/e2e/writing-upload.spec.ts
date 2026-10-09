@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 test('upload writing samples, review, save, and reuse after reload',async({page,context})=>{
- await context.addCookies([{name:'xrex_tour_v1',value:'done',url:'http://localhost:3000'}]);
+ await context.addInitScript(key=>localStorage.setItem(key,'done'),'xrex:tour:v2');
  await page.route('**/api/models',route=>route.fulfill({json:{models:[]}}));
  await page.goto('/');
  await page.getByText('Your writing style',{exact:true}).click();
