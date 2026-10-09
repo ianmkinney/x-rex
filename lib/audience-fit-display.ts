@@ -38,6 +38,27 @@ export type AudienceFitDisplay =
   | {eligible: false; display: 'Filtered'; sublabel: 'not eligible'; title: ''}
   | {eligible: true; display: string; sublabel: AudienceFitLabel; score: number; title: string};
 
+export type DisplayRankedResult<T extends {archetype: {id: string}; raw: number; eligible: boolean}> = {
+  result: T;
+  displayScore: number;
+};
+
+/** Sort analysis rows by display score (desc), then archetype id for ties. Ineligible rows sink to the bottom. */
+export function audienceResultsByDisplayScore<T extends {archetype: {id: string}; raw: number; eligible: boolean}>(
+  results: T[],
+): DisplayRankedResult<T>[] {
+  const scores = audienceFitDisplayScores(results);
+  return results
+    .map((result, index) => ({
+      result,
+      displayScore: result.eligible ? scores[index] : -1,
+    }))
+    .sort(
+      (a, b) =>
+        b.displayScore - a.displayScore || a.result.archetype.id.localeCompare(b.result.archetype.id, 'en'),
+    );
+}
+
 export function formatAudienceFit(displayScore: number, raw: number, eligible: boolean): AudienceFitDisplay {
   if (!eligible) {
     return {eligible: false, display: 'Filtered', sublabel: 'not eligible', title: ''};

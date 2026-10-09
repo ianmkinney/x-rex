@@ -6,6 +6,7 @@ import {
   AUDIENCE_FIT_STRONG_MIN,
   audienceFitDisplayScores,
   audienceFitLabel,
+  audienceResultsByDisplayScore,
   formatAudienceFit,
 } from '../lib/audience-fit-display';
 
@@ -28,12 +29,21 @@ test('rank-based display scores spread 0–100 across eligible archetypes', () =
   assert.deepEqual(scores, [0, 50, 100]);
 });
 
+test('display sort lists archetypes by descending display score', () => {
+  const results = analyze(SAMPLE, ARCHETYPES, DEFAULT_CONTEXT);
+  const rows = audienceResultsByDisplayScore(results);
+  for (let i = 1; i < rows.length; i++) {
+    assert.ok(rows[i - 1].displayScore >= rows[i].displayScore);
+  }
+  const tech = rows.find(r => r.result.archetype.id === 'tech-curious');
+  const everyday = rows.find(r => r.result.archetype.id === 'everyday');
+  assert.ok(tech && everyday && tech.displayScore > everyday.displayScore);
+});
+
 test('sample post analysis yields more than one fit label', () => {
   const results = analyze(SAMPLE, ARCHETYPES, DEFAULT_CONTEXT);
-  const scores = audienceFitDisplayScores(results);
-  const labels = new Set(
-    results.map((r, i) => (r.eligible ? formatAudienceFit(scores[i], r.raw, true).sublabel : null)).filter(Boolean),
-  );
+  const rows = audienceResultsByDisplayScore(results);
+  const labels = new Set(rows.map(r => (r.result.eligible ? formatAudienceFit(r.displayScore, r.result.raw, true).sublabel : null)).filter(Boolean));
   assert.ok(labels.size > 1);
   assert.ok(labels.has('Strong fit'));
   assert.ok(labels.has('Weak fit'));

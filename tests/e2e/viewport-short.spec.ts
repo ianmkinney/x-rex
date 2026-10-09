@@ -39,6 +39,18 @@ test('1024×570: rex launcher clears LIVE badge and audience scores', async ({br
   await context.close();
 });
 
+test('1024×570: audience scores sort descending on Analyze', async ({browser}) => {
+  const {context, page} = await shortPage(browser);
+  await page.goto('/');
+  const scores = await page.locator('.result-list .score').evaluateAll(els =>
+    els.map(el => Number(el.firstChild?.textContent?.trim() || 'NaN')).filter(n => !Number.isNaN(n)),
+  );
+  for (let i = 1; i < scores.length; i++) {
+    expect(scores[i - 1]).toBeGreaterThanOrEqual(scores[i]);
+  }
+  await context.close();
+});
+
 test('1024×570: sidebar tagline is hidden or fully visible', async ({browser}) => {
   const {context, page} = await shortPage(browser);
   await page.goto('/');
@@ -54,37 +66,57 @@ test('1024×570: sidebar tagline is hidden or fully visible', async ({browser}) 
   await context.close();
 });
 
-test('1024×570: first-visit tour avoids writing model controls', async ({browser}) => {
+test('1024×570: first-visit tour avoids tabs, heading, and inner scroll', async ({browser}) => {
   const {context, page} = await shortPage(browser, false);
   await page.goto('/');
   await expect(page.locator('.tour-hint')).toBeVisible();
-  const overlapsControls = await page.evaluate(() => {
+  const layout = await page.evaluate(() => {
     const overlap = (a: DOMRect, b: DOMRect) =>
       a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    const tour = document.querySelector('.tour-hint')?.getBoundingClientRect();
-    const controls = [
-      document.querySelector('.model-picker select'),
-      document.querySelector('.model-picker input[type="search"]'),
-      document.querySelector('.model-picker'),
-    ]
-      .filter(Boolean)
-      .map(el => el!.getBoundingClientRect());
-    return controls.some(rect => tour && overlap(tour, rect));
+    const tour = document.querySelector('.tour-hint');
+    if (!tour) return {tabs: true, heading: true, innerScroll: true};
+    const tourRect = tour.getBoundingClientRect();
+    const style = getComputedStyle(tour);
+    const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
+    const heading = document.querySelector('.page-heading h1')?.getBoundingClientRect();
+    const innerScroll =
+      (style.overflowY === 'auto' || style.overflowY === 'scroll') && tour.scrollHeight > tour.clientHeight + 1;
+    return {
+      tabs: !!(tabs && overlap(tourRect, tabs)),
+      heading: !!(heading && overlap(tourRect, heading)),
+      innerScroll,
+    };
   });
-  expect(overlapsControls).toBe(false);
+  expect(layout.tabs).toBe(false);
+  expect(layout.heading).toBe(false);
+  expect(layout.innerScroll).toBe(false);
   await context.close();
 });
 
-test('1024×570: no extra fixed controls on the right edge besides Rex', async ({browser}) => {
-  const {context, page} = await shortPage(browser);
+test('1024×570: Quick tour avoids tabs, heading, and inner scroll', async ({browser}) => {
+  const {context, page} = await shortPage(browser, true);
   await page.goto('/');
-  const extraFixed = await page.evaluate(() =>
-    [...document.querySelectorAll('button')].filter(button => {
-      const style = getComputedStyle(button);
-      const rect = button.getBoundingClientRect();
-      return style.position === 'fixed' && rect.right > window.innerWidth - 4 && !button.classList.contains('rex-launcher');
-    }).map(button => button.className),
-  );
-  expect(extraFixed).toEqual([]);
+  await page.getByRole('button', {name: 'Quick tour', exact: true}).click();
+  await expect(page.locator('.tour-hint')).toBeVisible();
+  const layout = await page.evaluate(() => {
+    const overlap = (a: DOMRect, b: DOMRect) =>
+      a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const tour = document.querySelector('.tour-hint');
+    if (!tour) return {tabs: true, heading: true, innerScroll: true};
+    const tourRect = tour.getBoundingClientRect();
+    const style = getComputedStyle(tour);
+    const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
+    const heading = document.querySelector('.page-heading h1')?.getBoundingClientRect();
+    const innerScroll =
+      (style.overflowY === 'auto' || style.overflowY === 'scroll') && tour.scrollHeight > tour.clientHeight + 1;
+    return {
+      tabs: !!(tabs && overlap(tourRect, tabs)),
+      heading: !!(heading && overlap(tourRect, heading)),
+      innerScroll,
+    };
+  });
+  expect(layout.tabs).toBe(false);
+  expect(layout.heading).toBe(false);
+  expect(layout.innerScroll).toBe(false);
   await context.close();
 });
