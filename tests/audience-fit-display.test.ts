@@ -29,15 +29,47 @@ test('rank-based display scores spread 0–100 across eligible archetypes', () =
   assert.deepEqual(scores, [0, 50, 100]);
 });
 
+test('tied raw values share the same display score', () => {
+  const scores = audienceFitDisplayScores([
+    {raw: -0.592, eligible: true},
+    {raw: -0.592, eligible: true},
+    {raw: -0.15, eligible: true},
+    {raw: 0.607, eligible: true},
+  ]);
+  assert.equal(scores[0], scores[1]);
+  assert.equal(scores[0], 0);
+  assert.equal(scores[2], 50);
+  assert.equal(scores[3], 100);
+  const rows = audienceResultsByDisplayScore(
+    scores.map((_, index) => ({
+      archetype: {id: `a-${index}`},
+      raw: [-0.592, -0.592, -0.15, 0.607][index],
+      eligible: true,
+    })),
+  );
+  for (let i = 1; i < rows.length; i++) {
+    assert.ok(rows[i - 1].displayScore >= rows[i].displayScore);
+  }
+  const tied = rows.filter(r => r.result.raw === -0.592);
+  assert.equal(tied.length, 2);
+  assert.equal(tied[0].displayScore, tied[1].displayScore);
+  assert.equal(rows[0].displayScore, 100);
+});
+
 test('display sort lists archetypes by descending display score', () => {
   const results = analyze(SAMPLE, ARCHETYPES, DEFAULT_CONTEXT);
   const rows = audienceResultsByDisplayScore(results);
   for (let i = 1; i < rows.length; i++) {
     assert.ok(rows[i - 1].displayScore >= rows[i].displayScore);
   }
+  const builders = rows.find(r => r.result.archetype.id === 'ai-builders');
+  const restaurants = rows.find(r => r.result.archetype.id === 'restaurant-owners');
+  assert.ok(builders && restaurants && builders.displayScore > restaurants.displayScore);
   const tech = rows.find(r => r.result.archetype.id === 'tech-curious');
   const everyday = rows.find(r => r.result.archetype.id === 'everyday');
-  assert.ok(tech && everyday && tech.displayScore > everyday.displayScore);
+  assert.ok(tech && everyday);
+  assert.equal(tech.result.raw, everyday.result.raw);
+  assert.equal(tech.displayScore, everyday.displayScore);
 });
 
 test('sample post analysis yields more than one fit label', () => {

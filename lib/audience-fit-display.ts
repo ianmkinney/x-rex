@@ -4,8 +4,9 @@
  * Raw weighted sums can cluster (many negatives look identical after offset
  * rescaling). For a readable mix of Strong / Okay / Weak labels, we rank
  * eligible archetypes by raw value within the current result set and map
- * rank linearly to 0–100 (worst → 0, best → 100). Tooltip text still shows
- * the underlying raw value score from the engine.
+ * distinct raw levels linearly to 0–100 (worst → 0, best → 100). Archetypes
+ * with the same raw value always share one display score. Tooltip text still
+ * shows the underlying raw value score from the engine.
  */
 export const AUDIENCE_FIT_STRONG_MIN = 70;
 export const AUDIENCE_FIT_OKAY_MIN = 40;
@@ -23,14 +24,18 @@ export function audienceFitDisplayScores(results: {raw: number; eligible: boolea
   const scores = results.map(() => 0);
   const eligible = results.map((r, i) => (r.eligible ? i : -1)).filter(i => i >= 0);
   if (!eligible.length) return scores;
-  if (eligible.length === 1) {
-    scores[eligible[0]] = 100;
-    return scores;
+  const distinctRaws = [...new Set(eligible.map(index => results[index].raw))].sort((a, b) => a - b);
+  const rawToScore = new Map<number, number>();
+  if (distinctRaws.length === 1) {
+    rawToScore.set(distinctRaws[0], 100);
+  } else {
+    distinctRaws.forEach((raw, groupRank) => {
+      rawToScore.set(raw, Math.round((groupRank / (distinctRaws.length - 1)) * 100));
+    });
   }
-  const sorted = [...eligible].sort((a, b) => results[a].raw - results[b].raw);
-  sorted.forEach((index, rank) => {
-    scores[index] = Math.round((rank / (sorted.length - 1)) * 100);
-  });
+  for (const index of eligible) {
+    scores[index] = rawToScore.get(results[index].raw)!;
+  }
   return scores;
 }
 
