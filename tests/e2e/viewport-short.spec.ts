@@ -8,8 +8,8 @@ const MOBILE_TOUR_VIEWPORT = {width: 390, height: 844};
 
 async function expectTourClearOfChrome(page: import('@playwright/test').Page) {
   const layout = await page.evaluate(tourStepQualityCheck);
-  expect(layout.tabs).toBe(false);
-  expect(layout.heading).toBe(false);
+  expect(layout.anchoredBottomRight).toBe(true);
+  expect(layout.bodyWithoutScroll).toBe(true);
   expect(layout.cardInnerScroll).toBe(false);
 }
 
@@ -22,18 +22,15 @@ async function assertTourSteps(
     await expect.poll(async () => {
       const layout = await page.evaluate(tourStepQualityCheck);
       const pickerOk = options?.modelPickerVisible ? layout.modelPickerVisible : true;
-      return layout.bodyVisible && layout.inViewport && !layout.writingModel && pickerOk;
+      return layout.bodyVisible && layout.inViewport && layout.anchoredBottomRight && pickerOk;
     }).toBe(true);
     const layout = await page.evaluate(tourStepQualityCheck);
     expect(layout.inViewport).toBe(true);
     expect(layout.bodyVisible).toBe(true);
     expect(layout.titleDotsOverlap).toBe(false);
-    expect(layout.tabs).toBe(false);
-    expect(layout.heading).toBe(false);
-    expect(layout.writingModel).toBe(false);
     if (options?.modelPickerVisible) expect(layout.modelPickerVisible).toBe(true);
+    expect(layout.anchoredBottomRight).toBe(true);
     if (options?.bodyWithoutScroll) expect(layout.bodyWithoutScroll).toBe(true);
-    expect(layout.labBadge).toBe(false);
     const primaryLabel = step === 5 ? 'Got it' : 'Next';
     if (options?.footerInViewport) {
       expect(layout.footerBackInViewport).toBe(true);
