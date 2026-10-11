@@ -6,6 +6,14 @@ import {TOUR_STORAGE_KEY} from '@/lib/tour';
 
 const TOUR_BOTTOM_GUTTER = 84;
 const TOUR_SIDE_GUTTER = 88;
+const TOUR_CLEARANCE = 12;
+
+const FORBIDDEN_SELECTORS = [
+  '.mode-tabs',
+  '.page-heading h1',
+  '.page-heading .version-pill',
+  '.model-picker',
+];
 
 const steps = [
   ['Meet your writing sidekick.', 'X-Rex helps you turn a good idea into a post worth reading. Explore audience fit, draft for specific interests, and keep your own voice. Scores are simulations—not a promise of For You placement.', 'START HERE'],
@@ -27,12 +35,85 @@ function rectsOverlap(a: DOMRect, b: DOMRect) {
   return a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
-function tourOverlapsChrome(tour: DOMRect) {
-  const blocks = [
-    document.querySelector('.mode-tabs')?.getBoundingClientRect(),
-    document.querySelector('.page-heading h1')?.getBoundingClientRect(),
-  ].filter((r): r is DOMRect => !!r && r.width > 0 && r.height > 0);
-  return blocks.some(block => rectsOverlap(tour, block));
+function forbiddenRects() {
+  return FORBIDDEN_SELECTORS.flatMap(sel => {
+    const el = document.querySelector(sel);
+    if (!el) return [];
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 ? [rect] : [];
+  });
+}
+
+function overlapsForbidden(tour: DOMRect) {
+  return forbiddenRects().some(block => rectsOverlap(tour, block));
+}
+
+function tabsFloor() {
+  const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
+  return (tabs?.bottom ?? 0) + TOUR_CLEARANCE;
+}
+
+function anchorInResultsColumn(el: HTMLElement) {
+  const results = document.querySelector('.results-panel')?.getBoundingClientRect();
+  if (results && results.width > 180) {
+    el.style.left = `${results.left + 16}px`;
+    el.style.right = 'auto';
+    el.style.maxWidth = `${Math.min(360, results.width - 32)}px`;
+    return;
+  }
+  el.style.left = 'auto';
+  el.style.right = `${TOUR_SIDE_GUTTER}px`;
+  el.style.maxWidth = '';
+}
+
+function applyPlacement(el: HTMLElement, compact: boolean, anchorTop: boolean) {
+  el.classList.toggle('tour-hint--tip', compact);
+  el.style.maxHeight = '';
+  el.style.overflowY = 'visible';
+  anchorInResultsColumn(el);
+  if (anchorTop) {
+    el.style.top = `${tabsFloor()}px`;
+    el.style.bottom = 'auto';
+  } else {
+    el.style.top = 'auto';
+    el.style.bottom = `${TOUR_BOTTOM_GUTTER}px`;
+  }
+}
+
+function fitsViewport(tour: DOMRect) {
+  const actions = document.querySelector('.tour-hint .tour-actions')?.getBoundingClientRect();
+  const actionsBottom = actions?.bottom ?? tour.bottom;
+  return tour.top >= tabsFloor() - 1 && actionsBottom <= window.innerHeight - 8;
+}
+
+function placeTourCard(el: HTMLElement) {
+  const short = window.innerHeight <= 750;
+  const layouts: {compact: boolean; anchorTop: boolean}[] = short
+    ? [
+        {compact: true, anchorTop: true},
+        {compact: false, anchorTop: true},
+        {compact: true, anchorTop: false},
+        {compact: false, anchorTop: false},
+      ]
+    : [
+        {compact: false, anchorTop: true},
+        {compact: true, anchorTop: true},
+        {compact: false, anchorTop: false},
+        {compact: true, anchorTop: false},
+      ];
+  let best: {compact: boolean; anchorTop: boolean} | null = null;
+  for (const layout of layouts) {
+    applyPlacement(el, layout.compact, layout.anchorTop);
+    const rect = el.getBoundingClientRect();
+    if (!overlapsForbidden(rect) && fitsViewport(rect)) return;
+    if (!overlapsForbidden(rect) && !best) best = layout;
+  }
+  if (best) applyPlacement(el, best.compact, best.anchorTop);
+  else applyPlacement(el, true, true);
+
+  if (el.getBoundingClientRect().bottom > window.innerHeight - 8) {
+    el.scrollIntoView({block: 'end', inline: 'nearest'});
+  }
 }
 
 export default function Walkthrough({request, onVoice}: {request: number; onVoice: () => void}) {
@@ -55,27 +136,10 @@ export default function Walkthrough({request, onVoice}: {request: number; onVoic
     if (!open) return;
     const el = tourRef.current;
     if (!el) return;
-
-    const place = () => {
-      el.style.top = 'auto';
-      el.style.bottom = `${TOUR_BOTTOM_GUTTER}px`;
-      el.style.maxHeight = '';
-      el.style.overflowY = 'visible';
-      el.removeAttribute('data-dense');
-
-      let bottom = TOUR_BOTTOM_GUTTER;
-      for (let i = 0; i < 80; i++) {
-        el.style.bottom = `${bottom}px`;
-        const rect = el.getBoundingClientRect();
-        if (!tourOverlapsChrome(rect)) break;
-        if (bottom > window.innerHeight * 0.45) el.setAttribute('data-dense', 'true');
-        bottom += 10;
-      }
-    };
-
-    place();
-    window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
+    const run = () => placeTourCard(el);
+    run();
+    window.addEventListener('resize', run);
+    return () => window.removeEventListener('resize', run);
   }, [open, step]);
 
   function finish() {
@@ -92,21 +156,14 @@ export default function Walkthrough({request, onVoice}: {request: number; onVoic
   const last = step === steps.length - 1;
 
   return (
-    <aside
-      ref={tourRef}
-      className="tour-hint"
-      role="status"
-      aria-live="polite"
-      aria-label="Quick tour tip"
-      style={{right: TOUR_SIDE_GUTTER}}
-    >
+    <aside ref={tourRef} className="tour-hint" role="status" aria-live="polite" aria-label="Quick tour tip">
       <div className="tour-hint-top">
         <Image src="/x-rex.webp" alt="" width={48} height={48}/>
         <button type="button" className="text-button" onClick={finish}>Dismiss</button>
       </div>
       <div className="eyebrow">{steps[step][2]}</div>
       <h2>{steps[step][0]}</h2>
-      <p>{steps[step][1]}</p>
+      <p className="tour-hint-body">{steps[step][1]}</p>
       <div className="tour-dots" aria-label="Tour steps">
         {steps.map((s, i) => (
           <button

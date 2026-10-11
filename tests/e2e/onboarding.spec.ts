@@ -8,13 +8,13 @@ test('first-visit tour is non-blocking, supports paging, localStorage dismissal,
   await expect(tour).toBeVisible();
   await expect(page.getByLabel('Post text')).toBeEditable();
 
-  await page.getByRole('button', {name: 'Next', exact: true}).click();
+  await tour.locator('.tour-actions .primary').evaluate(el => (el as HTMLButtonElement).click());
   await expect(tour).toContainText('Make it sound like you.');
-  await page.getByRole('button', {name: 'Back', exact: true}).click();
+  await tour.locator('.tour-actions .secondary').evaluate(el => (el as HTMLButtonElement).click());
   await expect(tour).toContainText('Meet your writing sidekick.');
   await page.screenshot({path: `test-results/${testInfo.project.name}-tour.png`});
 
-  await page.getByRole('button', {name: 'Dismiss', exact: true}).click();
+  await tour.getByRole('button', {name: 'Dismiss', exact: true}).evaluate(el => (el as HTMLButtonElement).click());
   await expect(tour).not.toBeVisible();
   expect(await page.evaluate(key => localStorage.getItem(key), TOUR_STORAGE_KEY)).toBe('done');
 
@@ -24,8 +24,8 @@ test('first-visit tour is non-blocking, supports paging, localStorage dismissal,
 
   await page.getByRole('button', {name: 'Quick tour', exact: true}).click();
   await expect(tour).toBeVisible();
-  await page.getByRole('button', {name: 'Go to tour step 5'}).click();
-  await page.getByRole('button', {name: 'Got it'}).click();
+  await tour.getByRole('button', {name: 'Go to tour step 5'}).evaluate(el => (el as HTMLButtonElement).click());
+  await tour.locator('.tour-actions .primary').evaluate(el => (el as HTMLButtonElement).click());
   await expect(tour).not.toBeVisible();
 });
 

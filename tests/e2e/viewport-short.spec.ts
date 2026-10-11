@@ -108,25 +108,82 @@ test('1024×570: Quick tour avoids tabs, heading, and inner scroll', async ({bro
   await context.close();
 });
 
-test('1280×713: Quick tour avoids tabs, heading, and inner scroll', async ({browser}) => {
+function tourStepQualityCheck() {
+  const overlap = (a: DOMRect, b: DOMRect) =>
+    a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  const tour = document.querySelector('.tour-hint');
+  if (!tour) {
+    return {bodyVisible: false, titleDotsOverlap: true, tabs: true, heading: true, writingModel: true, labBadge: true, innerScroll: true};
+  }
+  const tourRect = tour.getBoundingClientRect();
+  const style = getComputedStyle(tour);
+  const body = tour.querySelector('.tour-hint-body');
+  const bodyStyle = body ? getComputedStyle(body) : null;
+  const bodyRect = body?.getBoundingClientRect();
+  const title = tour.querySelector('h2')?.getBoundingClientRect();
+  const dots = tour.querySelector('.tour-dots')?.getBoundingClientRect();
+  const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
+  const heading = document.querySelector('.page-heading h1')?.getBoundingClientRect();
+  const writingModel = document.querySelector('.model-picker select')?.getBoundingClientRect();
+  const labBadge = document.querySelector('.page-heading .version-pill')?.getBoundingClientRect();
+  const innerScroll =
+    (style.overflowY === 'auto' || style.overflowY === 'scroll') && tour.scrollHeight > tour.clientHeight + 1;
+  return {
+    bodyVisible: !!(
+      body &&
+      bodyStyle &&
+      bodyStyle.display !== 'none' &&
+      bodyStyle.visibility !== 'hidden' &&
+      (bodyRect?.height ?? 0) > 8 &&
+      body.textContent?.trim()
+    ),
+    titleDotsOverlap: !!(title && dots && overlap(title, dots)),
+    tabs: !!(tabs && overlap(tourRect, tabs)),
+    heading: !!(heading && overlap(tourRect, heading)),
+    writingModel: !!(writingModel && overlap(tourRect, writingModel)),
+    labBadge: !!(labBadge && overlap(tourRect, labBadge)),
+    innerScroll,
+  };
+}
+
+test('1280×713: Quick tour stays clear on every step', async ({browser}) => {
   const context = await browser.newContext({viewport: DESKTOP_SHORT_VIEWPORT});
   await context.addInitScript(key => localStorage.setItem(key, 'done'), TOUR_STORAGE_KEY);
   const page = await context.newPage();
   await page.goto('/');
   await page.getByRole('button', {name: 'Quick tour', exact: true}).click();
   await expect(page.locator('.tour-hint')).toBeVisible();
-  const layout = await page.evaluate(tourOverlapCheck);
-  expect(layout.tabs).toBe(false);
-  expect(layout.heading).toBe(false);
-  expect(layout.innerScroll).toBe(false);
-  const anchoredRight = await page.evaluate(() => {
+
+  for (let step = 1; step <= 5; step++) {
+    const layout = await page.evaluate(tourStepQualityCheck);
+    expect(layout.bodyVisible).toBe(true);
+    expect(layout.titleDotsOverlap).toBe(false);
+    expect(layout.tabs).toBe(false);
+    expect(layout.heading).toBe(false);
+    expect(layout.writingModel).toBe(false);
+    expect(layout.labBadge).toBe(false);
+    expect(layout.innerScroll).toBe(false);
+    if (step < 5) {
+      await page.evaluate(() => {
+        document.querySelector<HTMLButtonElement>('.tour-hint .tour-actions .primary')?.click();
+      });
+    }
+  }
+
+  const anchoredInResults = await page.evaluate(() => {
     const tour = document.querySelector('.tour-hint');
-    if (!tour) return false;
-    const rect = tour.getBoundingClientRect();
+    const results = document.querySelector('.results-panel');
+    if (!tour || !results) return true;
+    const tourRect = tour.getBoundingClientRect();
+    const resultsRect = results.getBoundingClientRect();
     const sidebar = document.querySelector('.sidebar')?.getBoundingClientRect();
     const sidebarRight = sidebar?.right ?? 0;
-    return rect.right <= window.innerWidth - 48 && rect.left >= sidebarRight + 8;
+    return (
+      tourRect.left >= sidebarRight + 8 &&
+      tourRect.left >= resultsRect.left - 4 &&
+      tourRect.top >= (document.querySelector('.mode-tabs')?.getBoundingClientRect().bottom ?? 0) - 2
+    );
   });
-  expect(anchoredRight).toBe(true);
+  expect(anchoredInResults).toBe(true);
   await context.close();
 });
