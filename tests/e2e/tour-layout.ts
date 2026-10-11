@@ -15,6 +15,9 @@ export function tourStepQualityCheck() {
       voiceButtonInViewport: true,
       cardInnerScroll: true,
       scrollOnBodyRegion: false,
+      bodyWithoutScroll: false,
+      footerBackInViewport: false,
+      footerPrimaryInViewport: false,
     };
   }
   const tourRect = tour.getBoundingClientRect();
@@ -48,6 +51,10 @@ export function tourStepQualityCheck() {
     scrollRegionStyle &&
     (scrollRegionStyle.overflowY === 'auto' || scrollRegionStyle.overflowY === 'scroll')
   );
+  const footerBack = tour.querySelector('.tour-actions .secondary')?.getBoundingClientRect();
+  const footerPrimary = tour.querySelector('.tour-actions .primary')?.getBoundingClientRect();
+  const inViewport = (r: DOMRect | undefined) =>
+    !!r && r.top >= -0.5 && r.bottom <= window.innerHeight + 0.5 && r.height > 0;
   return {
     inViewport: tourRect.top >= -0.5 && tourRect.bottom <= window.innerHeight + 0.5,
     bodyVisible: !!(
@@ -80,5 +87,8 @@ export function tourStepQualityCheck() {
     voiceButtonInViewport: !voiceButton || (voiceButton.top >= 0 && voiceButton.bottom <= window.innerHeight + 0.5),
     cardInnerScroll,
     scrollOnBodyRegion,
+    bodyWithoutScroll: !!(body && body.scrollHeight <= body.clientHeight + 1),
+    footerBackInViewport: inViewport(footerBack),
+    footerPrimaryInViewport: inViewport(footerPrimary),
   };
 }
