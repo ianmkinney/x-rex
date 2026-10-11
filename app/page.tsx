@@ -1,5 +1,5 @@
 'use client';
-import {useRef,useState} from 'react';
+import {useMemo,useRef,useState} from 'react';
 import Image from 'next/image';
 import DiscoverTab from './components/DiscoverTab';
 import LengthPicker from './components/LengthPicker';
@@ -16,6 +16,7 @@ import DraftResults from './components/DraftResults';
 import {DEFAULT_MODEL,type DraftResponse} from '@/lib/drafts';
 import {Activity,ArrowUpRight,Check,ChevronDown,ChevronRight,Code2,Copy,FileText,FlaskConical,Info,LoaderCircle,Plus,ScanText,ShieldCheck,SlidersHorizontal,Sparkles,Upload,Users,X as Close,Braces,Download,RotateCcw,CheckCircle2} from 'lucide-react';
 import {CONTENT_MARKERS,markerSource,type ContentMarker} from '@/lib/content-guidance';
+import {audienceResultsByDisplayScore,formatAudienceFit} from '@/lib/audience-fit-display';
 import {ARCHETYPES,DEFAULT_CONTEXT,ENGINE_VERSION,LABELS,SOURCE_SHA,SOURCE_URL,WEIGHTS,analyze,buildPrompt,customArchetype,fingerprint,type Archetype,type Context,type Head,type Predictions,type Result} from '@/lib/engine';
 const SAMPLE='One small AI workflow that saves me time: ask Claude to turn meeting notes into an action list, then use an automation to create tasks. Start with one repetitive step, not your entire business. What would you automate first?';
 type Tab='analyze'|'create'|'profile'|'discover'|'method';
@@ -52,7 +53,8 @@ export default function Page(){
  const prompt=buildPrompt(chosen,topic,tone,inspiration&&!blendVoice?undefined:voice,length,contentContext)+inspirationPrompt(inspiration,blendVoice&&!!voice.examples.trim());
  const currentInput=JSON.stringify({text,context,archetypes,overrides});
  const dirty=currentInput!==lastInput;
- const top=results[0];
+ const audienceRows=useMemo(()=>audienceResultsByDisplayScore(results),[results]);
+ const top=audienceRows[0]?.result ?? results[0];
  const inspected=results.find(r=>r.archetype.id===activeResult);
  const changeContext=<K extends keyof Context>(field:K,value:Context[K])=>setContext(c=>({...c,[field]:value}));
  function run(){if(!text.trim()){setError('Paste a post or upload a file to analyze.');return;}setError('');setResults(analyze(text,archetypes,context,overrides));setLastInput(currentInput);setActiveResult(null);setNotice('Analysis updated. Same inputs always produce the same scores.');}
@@ -95,8 +97,8 @@ export default function Page(){
     {notice&&<div className="alert notice" role="status"><CheckCircle2 size={17}/><span>{notice}</span><button aria-label="Dismiss notice" onClick={()=>setNotice('')}><Close size={16}/></button></div>}
     <WriterProfile onChange={setVoice} request={voiceRequest} disabled={!!busy}/>
     <div className="page-heading"><div><div className="eyebrow">{tab==='analyze'?'POST → PEOPLE':tab==='create'?'PEOPLE → POST':tab==='profile'?'PROFILE → POST':tab==='discover'?'FIND YOUR INSPIRATION':'OPEN CODE. CLEAR ASSUMPTIONS.'}</div><h1>{tab==='analyze'?'Find your audience.':tab==='create'?'Start with your people.':tab==='profile'?'Write for their interests.':tab==='discover'?'Good voices. Fresh ideas.':'See what’s behind the score.'}</h1><p>{tab==='analyze'?'See which archetypes your post fits—and the signals behind the match.':tab==='create'?'Choose who you want to reach. Build a brief worth writing from.':tab==='profile'?'Turn a public profile into an evidence-based post brief.':tab==='discover'?'Discover active voices in your vertical. Turn inspiration into something of your own.':'Published ranking arithmetic, with every simulation assumption in view.'}</p></div><span className="version-pill">LAB / 01</span></div>
-    {tab!=='method'&&<ModelPicker value={selectedModel} onChange={setSelectedModel} disabled={!!busy}/>}
     {tab!=='method'&&<div className="mode-tabs" role="tablist" aria-label="Workflow"><button role="tab" aria-selected={tab==='analyze'} className={tab==='analyze'?'selected':''} onClick={()=>setTab('analyze')}><ScanText size={17}/>Analyze a post</button><button role="tab" aria-selected={tab==='create'} className={tab==='create'?'selected':''} onClick={()=>setTab('create')}><Users size={17}/>Build for an audience</button><button role="tab" aria-selected={tab==='profile'} className={tab==='profile'?'selected':''} onClick={()=>setTab('profile')}><Users size={17}/>Target a profile</button><button role="tab" aria-selected={tab==='discover'} className={tab==='discover'?'selected':''} onClick={()=>setTab('discover')}><Users size={17}/>Discover creators</button></div>}
+    {tab!=='method'&&<ModelPicker value={selectedModel} onChange={setSelectedModel} disabled={!!busy}/>}
     {tab==='analyze'&&<>
      <div className="analysis-grid">
       <section className="card composer"><div className="section-title"><span className="step">01</span><h2>Your post</h2><span className="tag">INPUT</span></div><div className="post-identity"><div className="x-avatar">𝕏</div><div><strong>A little context goes a long way.</strong><small>Paste your post or upload a file.</small></div></div>
@@ -115,7 +117,7 @@ export default function Page(){
       <section className="results-panel" aria-label="Audience results"><div className="section-title"><span className="step">02</span><h2>Audience fit</h2><span className="tag">{results.length} ARCHETYPES</span></div>
        <div className="result-toolbar"><span>Simulated scores · not reach predictions</span><button className="text-button" onClick={download} disabled={dirty}><Download size={14}/>Export</button></div>
        {dirty&&<div className="stale-note"><RotateCcw size={14}/>Inputs changed. Analyze again to update results.</div>}
-       <div className={dirty?'result-list stale':'result-list'}>{results.map((r,i)=><button key={r.archetype.id} className={`audience-row ${i===0?'first':''}`} onClick={()=>setActiveResult(r.archetype.id)} aria-label={`Inspect ${r.archetype.name}`}><span className="rank">{String(i+1).padStart(2,'0')}</span><span className="audience-icon" style={{background:`${r.archetype.color}18`,color:r.archetype.color}}>{r.archetype.name.slice(0,2).toUpperCase()}</span><span className="audience-info"><span className="audience-name">{r.archetype.name}{i===0&&r.eligible&&r.matches.length>0&&<span className="top-match">TOP FIT</span>}</span><span className="audience-topics">{r.overridden?'Manual inputs · ':''}{r.archetype.interests.slice(0,2).join(' · ')}</span><span className="meter"><span style={{width:`${r.affinity*100}%`,background:r.archetype.color}}/></span></span><span className="score">{r.eligible?r.raw.toFixed(3):'Filtered'}<small>{r.eligible?'value score':'not eligible'}</small></span><ChevronRight size={16}/></button>)}</div>
+       <div className={dirty?'result-list stale':'result-list'}>{audienceRows.map(({result:r,displayScore},i)=>{const fit=formatAudienceFit(displayScore,r.raw,r.eligible);return <button key={r.archetype.id} className={`audience-row ${i===0?'first':''}`} onClick={()=>setActiveResult(r.archetype.id)} aria-label={`Inspect ${r.archetype.name}`}><span className="rank">{String(i+1).padStart(2,'0')}</span><span className="audience-icon" style={{background:`${r.archetype.color}18`,color:r.archetype.color}}>{r.archetype.name.slice(0,2).toUpperCase()}</span><span className="audience-info"><span className="audience-name">{r.archetype.name}{i===0&&r.eligible&&r.matches.length>0&&<span className="top-match">TOP FIT</span>}</span><span className="audience-topics">{r.overridden?'Manual inputs · ':''}{r.archetype.interests.slice(0,2).join(' · ')}</span><span className="meter"><span style={{width:`${r.affinity*100}%`,background:r.archetype.color}}/></span></span><span className="score" title={fit.title}>{fit.display}<small>{fit.sublabel}</small></span><ChevronRight size={16}/></button>;})}</div>
        <button className="add-audience" onClick={()=>setCustom(true)}><Plus size={16}/>Create a custom archetype</button>
       </section>
      </div>

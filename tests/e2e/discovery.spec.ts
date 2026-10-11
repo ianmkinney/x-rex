@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {draftFixture} from './draft-fixture';
 test('discover creators, inspect standout posts, and blend a saved voice into a new session',async({page,context},testInfo)=>{
- await context.addCookies([{name:'xrex_tour_v1',value:'done',url:'http://localhost:3000'}]);
+ await context.addInitScript(key=>localStorage.setItem(key,'done'),'xrex:tour:v2');
  await page.addInitScript(()=>localStorage.setItem('xrex:voice:v1',JSON.stringify({handle:'@me',examples:'My distinctive kitchen rhythm.',notes:'Warm and funny.'})));
  await page.route('**/api/models',r=>r.fulfill({json:{models:[]}}));
  const post={id:'123',text:'The phone rings right in the middle of dinner service. Again. ☎️ Let AI handle the routine questions so your team can stay with the guests.',engagement:150,likes:100,reposts:30,replies:15,quotes:5,createdAt:'2026-10-03T12:00:00Z'};
