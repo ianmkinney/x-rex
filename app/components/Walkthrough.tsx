@@ -1,8 +1,11 @@
 'use client';
-import {useEffect,useState} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import Image from 'next/image';
 
 import {TOUR_STORAGE_KEY} from '@/lib/tour';
+
+const TOUR_BOTTOM_GUTTER = 84;
+const TOUR_SIDE_GUTTER = 88;
 
 const steps = [
   ['Meet your writing sidekick.', 'X-Rex helps you turn a good idea into a post worth reading. Explore audience fit, draft for specific interests, and keep your own voice. Scores are simulations—not a promise of For You placement.', 'START HERE'],
@@ -20,9 +23,22 @@ function tourDismissed() {
   }
 }
 
+function rectsOverlap(a: DOMRect, b: DOMRect) {
+  return a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function tourOverlapsChrome(tour: DOMRect) {
+  const blocks = [
+    document.querySelector('.mode-tabs')?.getBoundingClientRect(),
+    document.querySelector('.page-heading h1')?.getBoundingClientRect(),
+  ].filter((r): r is DOMRect => !!r && r.width > 0 && r.height > 0);
+  return blocks.some(block => rectsOverlap(tour, block));
+}
+
 export default function Walkthrough({request, onVoice}: {request: number; onVoice: () => void}) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const tourRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!tourDismissed()) setOpen(true);
@@ -34,6 +50,33 @@ export default function Walkthrough({request, onVoice}: {request: number; onVoic
       setOpen(true);
     }
   }, [request]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const el = tourRef.current;
+    if (!el) return;
+
+    const place = () => {
+      el.style.top = 'auto';
+      el.style.bottom = `${TOUR_BOTTOM_GUTTER}px`;
+      el.style.maxHeight = '';
+      el.style.overflowY = 'visible';
+      el.removeAttribute('data-dense');
+
+      let bottom = TOUR_BOTTOM_GUTTER;
+      for (let i = 0; i < 80; i++) {
+        el.style.bottom = `${bottom}px`;
+        const rect = el.getBoundingClientRect();
+        if (!tourOverlapsChrome(rect)) break;
+        if (bottom > window.innerHeight * 0.45) el.setAttribute('data-dense', 'true');
+        bottom += 10;
+      }
+    };
+
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open, step]);
 
   function finish() {
     try {
@@ -49,7 +92,14 @@ export default function Walkthrough({request, onVoice}: {request: number; onVoic
   const last = step === steps.length - 1;
 
   return (
-    <aside className="tour-hint" role="status" aria-live="polite" aria-label="Quick tour tip">
+    <aside
+      ref={tourRef}
+      className="tour-hint"
+      role="status"
+      aria-live="polite"
+      aria-label="Quick tour tip"
+      style={{right: TOUR_SIDE_GUTTER}}
+    >
       <div className="tour-hint-top">
         <Image src="/x-rex.webp" alt="" width={48} height={48}/>
         <button type="button" className="text-button" onClick={finish}>Dismiss</button>

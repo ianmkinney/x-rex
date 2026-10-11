@@ -2,6 +2,25 @@ import {test, expect, type Browser} from '@playwright/test';
 import {TOUR_STORAGE_KEY} from '../../lib/tour';
 
 const SHORT_VIEWPORT = {width: 1024, height: 570};
+const DESKTOP_SHORT_VIEWPORT = {width: 1280, height: 713};
+
+function tourOverlapCheck() {
+  const overlap = (a: DOMRect, b: DOMRect) =>
+    a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  const tour = document.querySelector('.tour-hint');
+  if (!tour) return {tabs: true, heading: true, innerScroll: true};
+  const tourRect = tour.getBoundingClientRect();
+  const style = getComputedStyle(tour);
+  const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
+  const heading = document.querySelector('.page-heading h1')?.getBoundingClientRect();
+  const innerScroll =
+    (style.overflowY === 'auto' || style.overflowY === 'scroll') && tour.scrollHeight > tour.clientHeight + 1;
+  return {
+    tabs: !!(tabs && overlap(tourRect, tabs)),
+    heading: !!(heading && overlap(tourRect, heading)),
+    innerScroll,
+  };
+}
 
 async function shortPage(browser: Browser, tourDone = true) {
   const context = await browser.newContext({viewport: SHORT_VIEWPORT});
@@ -70,23 +89,7 @@ test('1024×570: first-visit tour avoids tabs, heading, and inner scroll', async
   const {context, page} = await shortPage(browser, false);
   await page.goto('/');
   await expect(page.locator('.tour-hint')).toBeVisible();
-  const layout = await page.evaluate(() => {
-    const overlap = (a: DOMRect, b: DOMRect) =>
-      a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    const tour = document.querySelector('.tour-hint');
-    if (!tour) return {tabs: true, heading: true, innerScroll: true};
-    const tourRect = tour.getBoundingClientRect();
-    const style = getComputedStyle(tour);
-    const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
-    const heading = document.querySelector('.page-heading h1')?.getBoundingClientRect();
-    const innerScroll =
-      (style.overflowY === 'auto' || style.overflowY === 'scroll') && tour.scrollHeight > tour.clientHeight + 1;
-    return {
-      tabs: !!(tabs && overlap(tourRect, tabs)),
-      heading: !!(heading && overlap(tourRect, heading)),
-      innerScroll,
-    };
-  });
+  const layout = await page.evaluate(tourOverlapCheck);
   expect(layout.tabs).toBe(false);
   expect(layout.heading).toBe(false);
   expect(layout.innerScroll).toBe(false);
@@ -98,25 +101,32 @@ test('1024×570: Quick tour avoids tabs, heading, and inner scroll', async ({bro
   await page.goto('/');
   await page.getByRole('button', {name: 'Quick tour', exact: true}).click();
   await expect(page.locator('.tour-hint')).toBeVisible();
-  const layout = await page.evaluate(() => {
-    const overlap = (a: DOMRect, b: DOMRect) =>
-      a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    const tour = document.querySelector('.tour-hint');
-    if (!tour) return {tabs: true, heading: true, innerScroll: true};
-    const tourRect = tour.getBoundingClientRect();
-    const style = getComputedStyle(tour);
-    const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
-    const heading = document.querySelector('.page-heading h1')?.getBoundingClientRect();
-    const innerScroll =
-      (style.overflowY === 'auto' || style.overflowY === 'scroll') && tour.scrollHeight > tour.clientHeight + 1;
-    return {
-      tabs: !!(tabs && overlap(tourRect, tabs)),
-      heading: !!(heading && overlap(tourRect, heading)),
-      innerScroll,
-    };
-  });
+  const layout = await page.evaluate(tourOverlapCheck);
   expect(layout.tabs).toBe(false);
   expect(layout.heading).toBe(false);
   expect(layout.innerScroll).toBe(false);
+  await context.close();
+});
+
+test('1280×713: Quick tour avoids tabs, heading, and inner scroll', async ({browser}) => {
+  const context = await browser.newContext({viewport: DESKTOP_SHORT_VIEWPORT});
+  await context.addInitScript(key => localStorage.setItem(key, 'done'), TOUR_STORAGE_KEY);
+  const page = await context.newPage();
+  await page.goto('/');
+  await page.getByRole('button', {name: 'Quick tour', exact: true}).click();
+  await expect(page.locator('.tour-hint')).toBeVisible();
+  const layout = await page.evaluate(tourOverlapCheck);
+  expect(layout.tabs).toBe(false);
+  expect(layout.heading).toBe(false);
+  expect(layout.innerScroll).toBe(false);
+  const anchoredRight = await page.evaluate(() => {
+    const tour = document.querySelector('.tour-hint');
+    if (!tour) return false;
+    const rect = tour.getBoundingClientRect();
+    const sidebar = document.querySelector('.sidebar')?.getBoundingClientRect();
+    const sidebarRight = sidebar?.right ?? 0;
+    return rect.right <= window.innerWidth - 48 && rect.left >= sidebarRight + 8;
+  });
+  expect(anchoredRight).toBe(true);
   await context.close();
 });
