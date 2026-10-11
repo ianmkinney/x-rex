@@ -26,19 +26,25 @@ function tourDismissed() {
 const TOUR_BOTTOM_INSET = 16;
 const TOUR_CHROME_GAP = 8;
 
-const TOUR_HEIGHT_FORBIDDEN = ['.mode-tabs', '.page-heading h1', '.page-heading .version-pill'] as const;
+const TOUR_CHROME_SELECTORS = [
+  '.mode-tabs',
+  '.page-heading h1',
+  '.page-heading .version-pill',
+] as const;
 
-function tourHeightForbidden(): readonly string[] {
-  if (window.innerWidth <= 700) return [...TOUR_HEIGHT_FORBIDDEN, '.model-picker select'];
-  return TOUR_HEIGHT_FORBIDDEN;
+const TOUR_PICKER_CONTROL_SELECTORS = '.model-picker select, .model-picker button';
+
+function tourControlElements(): Element[] {
+  const nodes: Element[] = [];
+  for (const sel of TOUR_CHROME_SELECTORS) {
+    nodes.push(...document.querySelectorAll(sel));
+  }
+  document.querySelectorAll(TOUR_PICKER_CONTROL_SELECTORS).forEach(node => nodes.push(node));
+  return nodes;
 }
 
 function rectsOverlap(a: DOMRect, b: DOMRect) {
   return a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-}
-
-function horizOverlap(a: DOMRect, b: DOMRect) {
-  return a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left;
 }
 
 function tourWidthMax() {
@@ -46,34 +52,57 @@ function tourWidthMax() {
   return TOUR_WIDTH_MAX;
 }
 
-function shrinkWidthToClearControls(el: HTMLElement) {
-  const select = document.querySelector('.model-picker select');
-  const widthMax = tourWidthMax();
+function tourWidthMin() {
+  return window.innerWidth <= 700 ? 168 : TOUR_WIDTH_MIN;
+}
 
-  for (let width = widthMax; width >= TOUR_WIDTH_MIN; width -= 8) {
-    el.style.width = `${width}px`;
-    const rect = el.getBoundingClientRect();
-    const blocked = select ? rectsOverlap(rect, select.getBoundingClientRect()) : false;
-    if (!blocked) return;
+function controlOverlapsTour(el: HTMLElement) {
+  const rect = el.getBoundingClientRect();
+  for (const node of tourControlElements()) {
+    if (rectsOverlap(rect, node.getBoundingClientRect())) return true;
   }
-  el.style.width = `${TOUR_WIDTH_MIN}px`;
+  return false;
+}
+
+function shrinkWidthToClearControls(el: HTMLElement) {
+  const widthMax = tourWidthMax();
+  const widthMin = tourWidthMin();
+
+  for (let width = widthMax; width >= widthMin; width -= 8) {
+    el.style.width = `${width}px`;
+    if (!controlOverlapsTour(el)) return;
+  }
+  el.style.width = `${widthMin}px`;
 }
 
 function clampMaxHeightBelowChrome(el: HTMLElement) {
   const bottomInset = TOUR_BOTTOM_INSET;
   const cssMax = window.innerHeight - bottomInset - TOUR_CHROME_GAP;
-  const rect = el.getBoundingClientRect();
-  let minTop = TOUR_CHROME_GAP;
-  for (const sel of tourHeightForbidden()) {
-    document.querySelectorAll(sel).forEach(node => {
+  let maxH = cssMax;
+
+  for (let i = 0; i < 16; i++) {
+    el.style.maxHeight = `${Math.max(120, maxH)}px`;
+    const rect = el.getBoundingClientRect();
+    let minTop = TOUR_CHROME_GAP;
+    let overlaps = false;
+    for (const node of tourControlElements()) {
       const r = node.getBoundingClientRect();
-      if (r.width <= 0 || !horizOverlap(rect, r)) return;
+      if (!rectsOverlap(rect, r)) continue;
+      overlaps = true;
       minTop = Math.max(minTop, r.bottom + TOUR_CHROME_GAP);
-    });
+    }
+    if (!overlaps) {
+      el.dataset.compact = el.getBoundingClientRect().height < 220 ? 'true' : '';
+      return;
+    }
+    const nextMax = window.innerHeight - bottomInset - minTop;
+    if (nextMax >= maxH - 0.5) {
+      el.dataset.compact = 'true';
+      return;
+    }
+    maxH = nextMax;
+    el.dataset.compact = 'true';
   }
-  const maxH = Math.min(cssMax, window.innerHeight - bottomInset - minTop);
-  el.style.maxHeight = `${Math.max(148, maxH)}px`;
-  el.dataset.compact = el.getBoundingClientRect().height < 220 ? 'true' : '';
 }
 
 function keepCardInViewport(el: HTMLElement) {
@@ -115,29 +144,15 @@ function keepFooterInView(el: HTMLElement) {
   }
 }
 
-function clearSelectOverlap(el: HTMLElement) {
-  const select = document.querySelector('.model-picker select');
-  if (!select) return;
-  for (let i = 0; i < 12; i++) {
-    const rect = el.getBoundingClientRect();
-    const r = select.getBoundingClientRect();
-    if (!rectsOverlap(rect, r)) return;
-    const maxH = window.innerHeight - TOUR_BOTTOM_INSET - (r.bottom + TOUR_CHROME_GAP);
-    el.style.maxHeight = `${Math.max(120, maxH)}px`;
-    el.dataset.compact = el.getBoundingClientRect().height < 220 ? 'true' : '';
-  }
-}
-
 function layoutTourCard(el: HTMLElement) {
   el.style.width = `${tourWidthMax()}px`;
   el.style.maxHeight = '';
   delete el.dataset.compact;
-  shrinkWidthToClearControls(el);
-  clampMaxHeightBelowChrome(el);
-  clearSelectOverlap(el);
-  shrinkWidthToClearControls(el);
-  clampMaxHeightBelowChrome(el);
-  clearSelectOverlap(el);
+  for (let pass = 0; pass < 12; pass++) {
+    shrinkWidthToClearControls(el);
+    clampMaxHeightBelowChrome(el);
+    if (!controlOverlapsTour(el)) break;
+  }
   keepFooterInView(el);
   keepCardInViewport(el);
   keepVoiceInView(el);
@@ -176,9 +191,11 @@ export default function Walkthrough({request, onVoice}: {request: number; onVoic
     if (!el) return;
     const run = () => layoutTourCard(el);
     run();
+    const resizeObserver = new ResizeObserver(run);
     const watched = document.querySelector('.main-content');
-    const resizeObserver = watched ? new ResizeObserver(run) : null;
-    resizeObserver?.observe(watched!);
+    const picker = document.querySelector('.model-picker');
+    if (watched) resizeObserver.observe(watched);
+    if (picker) resizeObserver.observe(picker);
     window.addEventListener('resize', run);
     return () => {
       resizeObserver?.disconnect();

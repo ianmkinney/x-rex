@@ -10,6 +10,7 @@ export function tourStepQualityCheck() {
       tabs: true,
       heading: true,
       writingModel: true,
+      modelPickerVisible: false,
       labBadge: true,
       voiceButtonInViewport: true,
       cardInnerScroll: true,
@@ -25,11 +26,17 @@ export function tourStepQualityCheck() {
   const inCard = (r: DOMRect | undefined) =>
     !!r && r.bottom > cardRect.top + 0.5 && r.top < cardRect.bottom - 0.5 && r.width > 0;
   const title = tour.querySelector('h2')?.getBoundingClientRect();
-  const dots = tour.querySelector('.tour-dots')?.getBoundingClientRect();
+  const dotsRect = tour.querySelector('.tour-dots')?.getBoundingClientRect();
   const scrollRegion = tour.querySelector('.tour-hint-scroll');
   const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
   const heading = document.querySelector('.page-heading h1')?.getBoundingClientRect();
-  const writingModel = document.querySelector('.model-picker select')?.getBoundingClientRect();
+  const modelPickerEl = document.querySelector('.model-picker');
+  const modelPickerStyle = modelPickerEl ? getComputedStyle(modelPickerEl) : null;
+  const modelPickerRect = modelPickerEl?.getBoundingClientRect();
+  const pickerControls = modelPickerEl
+    ? [...modelPickerEl.querySelectorAll('select, button')]
+    : [];
+  const writingModel = pickerControls.some(control => overlap(tourRect, control.getBoundingClientRect()));
   const labBadge = document.querySelector('.page-heading .version-pill')?.getBoundingClientRect();
   const voiceEl = tour.querySelector('.tour-voice');
   const voiceButton = voiceEl?.getBoundingClientRect();
@@ -53,10 +60,22 @@ export function tourStepQualityCheck() {
       scrollRegion.clientHeight > 4 &&
       body.textContent?.trim()
     ),
-    titleDotsOverlap: !!(title && dots && inCard(title) && inCard(dots) && overlap(title, dots)),
+    titleDotsOverlap: !!(
+      scrollRegion &&
+      dotsRect &&
+      scrollRegion.getBoundingClientRect().bottom > dotsRect.top + 1
+    ),
     tabs: !!(tabs && overlap(tourRect, tabs)),
     heading: !!(heading && overlap(tourRect, heading)),
-    writingModel: !!(writingModel && overlap(tourRect, writingModel)),
+    writingModel,
+    modelPickerVisible: !!(
+      modelPickerEl &&
+      modelPickerStyle &&
+      modelPickerStyle.display !== 'none' &&
+      modelPickerStyle.visibility !== 'hidden' &&
+      (modelPickerRect?.height ?? 0) > 8 &&
+      (modelPickerRect?.width ?? 0) > 8
+    ),
     labBadge: !!(labBadge && overlap(tourRect, labBadge)),
     voiceButtonInViewport: !voiceButton || (voiceButton.top >= 0 && voiceButton.bottom <= window.innerHeight + 0.5),
     cardInnerScroll,

@@ -13,12 +13,16 @@ async function expectTourClearOfChrome(page: import('@playwright/test').Page) {
   expect(layout.cardInnerScroll).toBe(false);
 }
 
-async function assertTourSteps(page: import('@playwright/test').Page) {
+async function assertTourSteps(
+  page: import('@playwright/test').Page,
+  options?: {modelPickerVisible?: boolean},
+) {
   const tour = page.getByRole('status', {name: 'Quick tour tip'});
   for (let step = 1; step <= 5; step++) {
     await expect.poll(async () => {
       const layout = await page.evaluate(tourStepQualityCheck);
-      return layout.bodyVisible && layout.inViewport && !layout.writingModel;
+      const pickerOk = options?.modelPickerVisible ? layout.modelPickerVisible : true;
+      return layout.bodyVisible && layout.inViewport && !layout.writingModel && pickerOk;
     }).toBe(true);
     const layout = await page.evaluate(tourStepQualityCheck);
     expect(layout.inViewport).toBe(true);
@@ -27,6 +31,7 @@ async function assertTourSteps(page: import('@playwright/test').Page) {
     expect(layout.tabs).toBe(false);
     expect(layout.heading).toBe(false);
     expect(layout.writingModel).toBe(false);
+    if (options?.modelPickerVisible) expect(layout.modelPickerVisible).toBe(true);
     expect(layout.labBadge).toBe(false);
     if (step === 5) {
       const voice = tour.getByRole('button', {name: 'Set up my writing voice', exact: true});
@@ -35,7 +40,10 @@ async function assertTourSteps(page: import('@playwright/test').Page) {
     }
     expect(layout.cardInnerScroll).toBe(false);
     if (step < 5) {
-      await tour.getByRole('button', {name: 'Next', exact: true}).click();
+      const next = tour.getByRole('button', {name: 'Next', exact: true});
+      await next.scrollIntoViewIfNeeded();
+      await expect(next).toBeInViewport();
+      await next.click();
       await expect.poll(async () => (await page.evaluate(tourStepQualityCheck)).inViewport).toBe(true);
     }
   }
@@ -126,9 +134,11 @@ test('1280×713: Quick tour stays clear on every step', async ({browser}) => {
   await context.addInitScript(key => localStorage.setItem(key, 'done'), TOUR_STORAGE_KEY);
   const page = await context.newPage();
   await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('.model-picker')).toBeVisible();
   await page.getByRole('button', {name: 'Quick tour', exact: true}).click();
   await expect.poll(async () => (await page.evaluate(tourStepQualityCheck)).inViewport).toBe(true);
-  await assertTourSteps(page);
+  await assertTourSteps(page, {modelPickerVisible: true});
   await context.close();
 });
 
@@ -137,6 +147,8 @@ test('390×844: Quick tour stays clear on every step', async ({browser}) => {
   await context.addInitScript(key => localStorage.setItem(key, 'done'), TOUR_STORAGE_KEY);
   const page = await context.newPage();
   await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('.model-picker')).toBeVisible();
   await page.getByRole('button', {name: 'Quick tour', exact: true}).click();
   await expect.poll(async () => (await page.evaluate(tourStepQualityCheck)).inViewport).toBe(true);
   await assertTourSteps(page);
