@@ -4,16 +4,8 @@ import Image from 'next/image';
 
 import {TOUR_STORAGE_KEY} from '@/lib/tour';
 
-const TOUR_BOTTOM_GUTTER = 84;
-const TOUR_SIDE_GUTTER = 88;
-const TOUR_CLEARANCE = 12;
-
-const FORBIDDEN_SELECTORS = [
-  '.mode-tabs',
-  '.page-heading h1',
-  '.page-heading .version-pill',
-  '.model-picker',
-];
+const TOUR_WIDTH_MAX = 300;
+const TOUR_WIDTH_MIN = 200;
 
 const steps = [
   ['Meet your writing sidekick.', 'X-Rex helps you turn a good idea into a post worth reading. Explore audience fit, draft for specific interests, and keep your own voice. Scores are simulations—not a promise of For You placement.', 'START HERE'],
@@ -31,98 +23,144 @@ function tourDismissed() {
   }
 }
 
+const TOUR_BOTTOM_INSET = 16;
+const TOUR_CHROME_GAP = 8;
+
+const TOUR_HEIGHT_FORBIDDEN = ['.mode-tabs', '.page-heading h1', '.page-heading .version-pill'] as const;
+
+function tourHeightForbidden(): readonly string[] {
+  if (window.innerWidth <= 700) return [...TOUR_HEIGHT_FORBIDDEN, '.model-picker select'];
+  return TOUR_HEIGHT_FORBIDDEN;
+}
+
 function rectsOverlap(a: DOMRect, b: DOMRect) {
   return a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
-function forbiddenRects() {
-  return FORBIDDEN_SELECTORS.flatMap(sel => {
-    const el = document.querySelector(sel);
-    if (!el) return [];
+function horizOverlap(a: DOMRect, b: DOMRect) {
+  return a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left;
+}
+
+function tourWidthMax() {
+  if (window.innerWidth <= 700) return Math.min(TOUR_WIDTH_MAX, 240);
+  return TOUR_WIDTH_MAX;
+}
+
+function shrinkWidthToClearControls(el: HTMLElement) {
+  const select = document.querySelector('.model-picker select');
+  const widthMax = tourWidthMax();
+
+  for (let width = widthMax; width >= TOUR_WIDTH_MIN; width -= 8) {
+    el.style.width = `${width}px`;
     const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 ? [rect] : [];
-  });
+    const blocked = select ? rectsOverlap(rect, select.getBoundingClientRect()) : false;
+    if (!blocked) return;
+  }
+  el.style.width = `${TOUR_WIDTH_MIN}px`;
 }
 
-function overlapsForbidden(tour: DOMRect) {
-  return forbiddenRects().some(block => rectsOverlap(tour, block));
+function clampMaxHeightBelowChrome(el: HTMLElement) {
+  const bottomInset = TOUR_BOTTOM_INSET;
+  const cssMax = window.innerHeight - bottomInset - TOUR_CHROME_GAP;
+  const rect = el.getBoundingClientRect();
+  let minTop = TOUR_CHROME_GAP;
+  for (const sel of tourHeightForbidden()) {
+    document.querySelectorAll(sel).forEach(node => {
+      const r = node.getBoundingClientRect();
+      if (r.width <= 0 || !horizOverlap(rect, r)) return;
+      minTop = Math.max(minTop, r.bottom + TOUR_CHROME_GAP);
+    });
+  }
+  const maxH = Math.min(cssMax, window.innerHeight - bottomInset - minTop);
+  el.style.maxHeight = `${Math.max(148, maxH)}px`;
+  el.dataset.compact = el.getBoundingClientRect().height < 220 ? 'true' : '';
 }
 
-function tabsFloor() {
-  const tabs = document.querySelector('.mode-tabs')?.getBoundingClientRect();
-  return (tabs?.bottom ?? 0) + TOUR_CLEARANCE;
-}
-
-function anchorInResultsColumn(el: HTMLElement) {
-  const results = document.querySelector('.results-panel')?.getBoundingClientRect();
-  if (results && results.width > 180) {
-    el.style.left = `${results.left + 16}px`;
-    el.style.right = 'auto';
-    el.style.maxWidth = `${Math.min(360, results.width - 32)}px`;
+function keepCardInViewport(el: HTMLElement) {
+  for (let i = 0; i < 8; i++) {
+    const rect = el.getBoundingClientRect();
+    if (rect.top >= -0.5 && rect.bottom <= window.innerHeight + 0.5) return;
+    if (rect.top < -0.5) {
+      const trim = -rect.top + 4;
+      el.style.maxHeight = `${Math.max(120, rect.height - trim)}px`;
+      el.dataset.compact = 'true';
+      continue;
+    }
     return;
   }
-  el.style.left = 'auto';
-  el.style.right = `${TOUR_SIDE_GUTTER}px`;
-  el.style.maxWidth = '';
 }
 
-function applyPlacement(el: HTMLElement, compact: boolean, anchorTop: boolean) {
-  el.classList.toggle('tour-hint--tip', compact);
-  el.style.maxHeight = '';
-  el.style.overflowY = 'visible';
-  anchorInResultsColumn(el);
-  if (anchorTop) {
-    el.style.top = `${tabsFloor()}px`;
-    el.style.bottom = 'auto';
-  } else {
-    el.style.top = 'auto';
-    el.style.bottom = `${TOUR_BOTTOM_GUTTER}px`;
+function keepVoiceInView(el: HTMLElement) {
+  const voice = el.querySelector('.tour-voice');
+  if (!voice) return;
+  for (let i = 0; i < 10; i++) {
+    const r = voice.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= window.innerHeight + 0.5 && r.height > 0) return;
+    const overflow = Math.max(0, r.bottom - window.innerHeight) + Math.max(0, -r.top);
+    el.style.maxHeight = `${Math.max(120, el.getBoundingClientRect().height - overflow - 6)}px`;
+    el.dataset.compact = 'true';
   }
 }
 
-function fitsViewport(tour: DOMRect) {
-  const actions = document.querySelector('.tour-hint .tour-actions')?.getBoundingClientRect();
-  const actionsBottom = actions?.bottom ?? tour.bottom;
-  return tour.top >= tabsFloor() - 1 && actionsBottom <= window.innerHeight - 8;
+function keepFooterInView(el: HTMLElement) {
+  const footer = el.querySelector('.tour-hint-footer');
+  if (!footer) return;
+  for (let i = 0; i < 8; i++) {
+    const footerBottom = footer.getBoundingClientRect().bottom;
+    if (footerBottom <= window.innerHeight + 0.5) return;
+    const trim = footerBottom - window.innerHeight + 4;
+    const maxH = el.getBoundingClientRect().height - trim;
+    el.style.maxHeight = `${Math.max(120, maxH)}px`;
+    el.dataset.compact = 'true';
+  }
 }
 
-function placeTourCard(el: HTMLElement) {
-  const short = window.innerHeight <= 750;
-  const layouts: {compact: boolean; anchorTop: boolean}[] = short
-    ? [
-        {compact: true, anchorTop: true},
-        {compact: false, anchorTop: true},
-        {compact: true, anchorTop: false},
-        {compact: false, anchorTop: false},
-      ]
-    : [
-        {compact: false, anchorTop: true},
-        {compact: true, anchorTop: true},
-        {compact: false, anchorTop: false},
-        {compact: true, anchorTop: false},
-      ];
-  let best: {compact: boolean; anchorTop: boolean} | null = null;
-  for (const layout of layouts) {
-    applyPlacement(el, layout.compact, layout.anchorTop);
+function clearSelectOverlap(el: HTMLElement) {
+  const select = document.querySelector('.model-picker select');
+  if (!select) return;
+  for (let i = 0; i < 12; i++) {
     const rect = el.getBoundingClientRect();
-    if (!overlapsForbidden(rect) && fitsViewport(rect)) return;
-    if (!overlapsForbidden(rect) && !best) best = layout;
+    const r = select.getBoundingClientRect();
+    if (!rectsOverlap(rect, r)) return;
+    const maxH = window.innerHeight - TOUR_BOTTOM_INSET - (r.bottom + TOUR_CHROME_GAP);
+    el.style.maxHeight = `${Math.max(120, maxH)}px`;
+    el.dataset.compact = el.getBoundingClientRect().height < 220 ? 'true' : '';
   }
-  if (best) applyPlacement(el, best.compact, best.anchorTop);
-  else applyPlacement(el, true, true);
+}
 
-  if (el.getBoundingClientRect().bottom > window.innerHeight - 8) {
-    el.scrollIntoView({block: 'end', inline: 'nearest'});
-  }
+function layoutTourCard(el: HTMLElement) {
+  el.style.width = `${tourWidthMax()}px`;
+  el.style.maxHeight = '';
+  delete el.dataset.compact;
+  shrinkWidthToClearControls(el);
+  clampMaxHeightBelowChrome(el);
+  clearSelectOverlap(el);
+  shrinkWidthToClearControls(el);
+  clampMaxHeightBelowChrome(el);
+  clearSelectOverlap(el);
+  keepFooterInView(el);
+  keepCardInViewport(el);
+  keepVoiceInView(el);
 }
 
 export default function Walkthrough({request, onVoice}: {request: number; onVoice: () => void}) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [mobileLayout, setMobileLayout] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches,
+  );
   const tourRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!tourDismissed()) setOpen(true);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 700px)');
+    const update = () => setMobileLayout(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
   }, []);
 
   useEffect(() => {
@@ -136,10 +174,16 @@ export default function Walkthrough({request, onVoice}: {request: number; onVoic
     if (!open) return;
     const el = tourRef.current;
     if (!el) return;
-    const run = () => placeTourCard(el);
+    const run = () => layoutTourCard(el);
     run();
+    const watched = document.querySelector('.main-content');
+    const resizeObserver = watched ? new ResizeObserver(run) : null;
+    resizeObserver?.observe(watched!);
     window.addEventListener('resize', run);
-    return () => window.removeEventListener('resize', run);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', run);
+    };
   }, [open, step]);
 
   function finish() {
@@ -161,33 +205,42 @@ export default function Walkthrough({request, onVoice}: {request: number; onVoic
         <Image src="/x-rex.webp" alt="" width={48} height={48}/>
         <button type="button" className="text-button" onClick={finish}>Dismiss</button>
       </div>
-      <div className="eyebrow">{steps[step][2]}</div>
-      <h2>{steps[step][0]}</h2>
-      <p className="tour-hint-body">{steps[step][1]}</p>
-      <div className="tour-dots" aria-label="Tour steps">
-        {steps.map((s, i) => (
-          <button
-            key={s[0]}
-            type="button"
-            aria-label={`Go to tour step ${i + 1}`}
-            aria-current={i === step ? 'step' : undefined}
-            className={i === step ? 'active' : ''}
-            onClick={() => setStep(i)}
-          />
-        ))}
+      <div className="tour-hint-scroll">
+        <div className="eyebrow">{steps[step][2]}</div>
+        <h2>{steps[step][0]}</h2>
+        <p className="tour-hint-body">{steps[step][1]}</p>
+        {last && mobileLayout && (
+          <button type="button" className="text-button tour-voice" onClick={() => { finish(); onVoice(); }}>
+            Set up my writing voice
+          </button>
+        )}
       </div>
-      <div className="tour-actions">
-        <button type="button" className="secondary" disabled={step === 0} onClick={() => setStep(n => n - 1)}>Back</button>
-        <button type="button" className="primary" onClick={() => (last ? finish() : setStep(n => n + 1))}>
-          {last ? 'Got it' : 'Next'}
-        </button>
+      <div className="tour-hint-footer">
+        {last && !mobileLayout && (
+          <button type="button" className="text-button tour-voice" onClick={() => { finish(); onVoice(); }}>
+            Set up my writing voice
+          </button>
+        )}
+        <div className="tour-dots" aria-label="Tour steps">
+          {steps.map((s, i) => (
+            <button
+              key={s[0]}
+              type="button"
+              aria-label={`Go to tour step ${i + 1}`}
+              aria-current={i === step ? 'step' : undefined}
+              className={i === step ? 'active' : ''}
+              onClick={() => setStep(i)}
+            />
+          ))}
+        </div>
+        <div className="tour-actions">
+          <button type="button" className="secondary" disabled={step === 0} onClick={() => setStep(n => n - 1)}>Back</button>
+          <button type="button" className="primary" onClick={() => (last ? finish() : setStep(n => n + 1))}>
+            {last ? 'Got it' : 'Next'}
+          </button>
+        </div>
+        <small>{step + 1} of {steps.length} · You can replay this anytime</small>
       </div>
-      {last && (
-        <button type="button" className="text-button tour-voice" onClick={() => { finish(); onVoice(); }}>
-          Set up my writing voice
-        </button>
-      )}
-      <small>{step + 1} of {steps.length} · You can replay this anytime</small>
     </aside>
   );
 }
