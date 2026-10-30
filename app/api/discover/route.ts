@@ -1,8 +1,9 @@
 import {NextRequest,NextResponse} from 'next/server';
+import {withPaidGuard} from '@/lib/paid-guard';
 import {discoveryInput,discoveryQuery,rankCreators} from '@/lib/discovery';
 export const maxDuration=30;
 const reply=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});
-export async function POST(request:NextRequest){
+export const POST=withPaidGuard(async (request:NextRequest)=>{
  try{
  const raw=await request.text();if(raw.length>1000)return reply({error:'Search input is too long.'},413);
  let value:unknown;try{value=JSON.parse(raw);}catch{return reply({error:'Invalid search request.'},400);}
@@ -15,4 +16,4 @@ export async function POST(request:NextRequest){
  const body=await response.json();const creators=rankCreators(body);
  return reply({creators,query,searchedAt:new Date().toISOString(),sampleSize:Array.isArray(body.data)?body.data.length:0,scope:'Up to 100 recent matching English-language original posts from the last 7 days. Rankings cover this sample only.',warning:body.errors?.length?'X returned partial results; some matching accounts may be missing.':undefined});
  }catch{return reply({error:'Could not load X discovery results. Please retry.'},502);}
-}
+});

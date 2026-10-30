@@ -1,7 +1,7 @@
 import {parsePost} from '../lib/post-text';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {NextRequest} from 'next/server';
+import {invitedRequest} from './invite-helper';
 import {discoveryQuery,rankCreators,inspirationPrompt} from '../lib/discovery';
 import {POST} from '../app/api/discover/route';
 import {buildPrompt,ARCHETYPES} from '../lib/engine';
@@ -13,7 +13,7 @@ test('discovery ranks observed engagement, selects standout, and does not invent
 test('discovery calls only official search and surfaces denied access',async()=>{
  const oldKey=process.env.X_BEARER_TOKEN,oldFetch=globalThis.fetch;process.env.X_BEARER_TOKEN='server-test-token';
  try{globalThis.fetch=async(input,init)=>{const url=new URL(String(input));assert.equal(url.origin,'https://api.x.com');assert.equal(url.pathname,'/2/tweets/search/recent');assert.equal(url.searchParams.get('max_results'),'100');assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer server-test-token');return Response.json(payload);};
- const request=()=>new NextRequest('http://localhost/api/discover',{method:'POST',body:JSON.stringify({vertical:'restaurants',topic:'AI services'})});
+ const request=()=>invitedRequest('http://localhost/api/discover',{method:'POST',body:JSON.stringify({vertical:'restaurants',topic:'AI services'})});
  let r=await POST(request());assert.equal(r.status,200);assert.equal((await r.json()).creators[0].username,'kitchentech');
  globalThis.fetch=async()=>new Response('',{status:402});r=await POST(request());assert.equal(r.status,402);assert.match((await r.json()).error,/credits/);
  }finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.X_BEARER_TOKEN;else process.env.X_BEARER_TOKEN=oldKey;}
