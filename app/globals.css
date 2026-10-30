@@ -27,3 +27,11 @@
 @media(max-width:1000px){.creator-grid{grid-template-columns:1fr}.discovery-fields{grid-template-columns:1fr 1fr}.discovery-fields button{grid-column:1/-1}}@media(max-width:700px){.discovery-fields{grid-template-columns:1fr}.username-start{display:block}.username-start button{width:100%;margin-top:12px}.discovery-results-head{align-items:start;flex-direction:column}.sidebar nav{overflow-x:auto}.sidebar nav .nav-item{min-width:62px;font-size:8px}.creator-card{padding:16px}.creator-heading h3{font-size:13px}.creator-followers{font-size:12px}}
 .invite-card{margin-bottom:20px}
 .invite-card .alert{margin:12px 0 0}
+.owner-signin,.owner-bar details{margin-top:14px}
+.owner-signin summary,.owner-bar summary{cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.owner-bar .section-title .text-button{margin-left:auto}
+.passkey-signin,.passkey-panel{display:grid;gap:10px;margin-top:12px}
+.passkey-signin form{display:grid;gap:10px}
+.passkey-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.recovery-codes ol{columns:2;font-size:13px}
+.passkey-check{display:flex;gap:8px;align-items:center;font-size:13px}

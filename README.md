@@ -48,12 +48,54 @@ The writing-model picker loads the live OpenRouter text-model catalog and defaul
 Every route that spends the owner's OpenRouter or X API credit is wrapped in one shared guard, `withPaidGuard` in `lib/paid-guard.ts`: `POST /api/ai` (drafts, AI archetypes, screenshot transcription, X-Rex help chat), `POST /api/profile` (profile import, writer-voice import, "Write like @username"), and `POST /api/discover` (creator discovery). Deterministic scoring, prompt building, and the public `/api/models` catalog make no paid calls and stay open. The guard checks, in order:
 
 1. **Kill switch (fails closed).** Paid features are on only when `PAID_FEATURES_ENABLED` is exactly `true` (any letter case). In production (`NODE_ENV=production` or `VERCEL_ENV=production`), anything else (unset, empty, `false`, or a typo such as `ture`) turns them off. Outside production an unset value defaults to on, but any value other than `true` still turns them off. When off, every paid route returns 503 JSON; the UI reads `GET /api/status`, shows a notice, and disables the paid buttons. **Set `PAID_FEATURES_ENABLED=true` in Vercel Production to turn paid features on.**
-2. **Invite gate.** `INVITE_CODES` is a comma-separated list of codes. Users enter a code in the invite card; `POST /api/invite` checks it on the server and sets an `httpOnly`, `secure`, `sameSite=lax` cookie that holds an HMAC of the code, never the raw code. Without a valid cookie, paid routes return 401 JSON. If `INVITE_CODES` is unset or empty, paid routes stay locked. Removing a code revokes its cookies. Invite attempts, including paid requests that carry a wrong invite cookie, are limited to 20 per IP per UTC day.
+2. **Invite gate or owner passkey.** A valid owner passkey session (see [Owner passkey sign-in](#owner-passkey-sign-in)) also unlocks paid routes; the kill switch and caps still apply to it. `INVITE_CODES` is a comma-separated list of codes. Users enter a code in the invite card; `POST /api/invite` checks it on the server and sets an `httpOnly`, `secure`, `sameSite=lax` cookie that holds an HMAC of the code, never the raw code. Without a valid cookie, paid routes return 401 JSON. If `INVITE_CODES` is unset or empty, paid routes stay locked. Removing a code revokes its cookies. Invite attempts, including paid requests that carry a wrong invite cookie, are limited to 20 per IP per UTC day.
 3. **Daily caps.** `PAID_DAILY_CAP_PER_IP` (default 20) and `PAID_DAILY_CAP_GLOBAL` (default 300) count paid requests per UTC day. Over a cap, routes return 429 JSON with `Retry-After` (seconds until UTC midnight). Counters use Upstash Redis / Vercel KV when `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` or `KV_REST_API_URL` + `KV_REST_API_TOKEN` are set. Otherwise, in development and tests only, they fall back to in-memory counters, which reset on cold starts and are not shared between instances. In production, paid routes return 503 `limits_unavailable` until Redis/KV is configured. If Redis is configured but unreachable, paid routes return 503 rather than run uncapped.
 
 The client IP comes from `x-vercel-forwarded-for`, then `x-real-ip`, then the right-most `X-Forwarded-For` entry (Vercel sets all three itself); IPv6 addresses are grouped by /64. Requests with no usable IP share one `unknown` bucket capped at 5 paid requests per day (or the per-IP cap, if lower), which also counts toward the global cap. Outside Vercel, run behind a proxy that overwrites these headers, or the per-IP cap can be spoofed (the global cap still applies). `INVITE_COOKIE_SECRET` (32+ random characters, e.g. `openssl rand -base64 32`) signs invite cookies so they cannot be computed from a known code; changing it signs everyone out. It is **required in production**: without it, `POST /api/invite` returns 503 `invite_unavailable` and no invite cookie is accepted. In development an unset secret falls back to a random per-process key, so local invite cookies reset when the server restarts.
 
 > **MANUAL STEP (Ian):** set a hard spend limit on the OpenRouter API key in the OpenRouter dashboard (Settings → API Keys → edit key → credit limit), and a usage cap on the X developer account. The caps above limit request counts, not dollars.
+
+## Owner passkey sign-in
+
+The site owner can unlock paid features with a phone or laptop passkey instead of an invite code. The design is ported from phil-kalshi's passkey sign-in ([`@simplewebauthn/server`](https://simplewebauthn.dev) v14 and `@simplewebauthn/browser` v14). Signing in takes two steps: the owner password, then a user-verified passkey assertion (Face ID / Touch ID / Windows Hello / Android screen lock, or a security key with a PIN). The password alone never issues a session; it only sets a 5-minute `xrex_pre` cookie that is good for nothing except finishing a passkey ceremony. Open it from the invite card: **Site owner? Sign in with a passkey**.
+
+| Variable | Purpose |
+| --- | --- |
+| `OWNER_PASSWORD` | Owner password, 16+ characters. The first sign-in step. |
+| `SESSION_SECRET` | 32+ random characters that sign the session cookies. Rotating it signs everyone out. |
+| `PASSKEY_SETUP_TOKEN` | One-time random secret (32+ characters) that, with the password, enrolls the **first** passkey. Remove it after enrolling. |
+| `WEBAUTHN_RP_ID` | **Required in production**: the exact host passkeys are bound to, e.g. `x-rex.vercel.app`. Leave unset in Preview/Development. |
+| `WEBAUTHN_ORIGINS` | **Required in production**: comma-separated allowed origins, each `https://host[:port]` on `WEBAUTHN_RP_ID` or a subdomain of it, e.g. `https://x-rex.vercel.app`. Outside production it defaults to `https://<WEBAUTHN_RP_ID>`, or the request's own origin when the RP ID is unset. |
+| `WEBAUTHN_RP_NAME` | Optional display name in the passkey prompt (default `X-Rex`). |
+
+Passkeys also need Upstash Redis / Vercel KV (the same variables as the daily caps). Without Redis, or with a short password or secret, the sign-in endpoints return 503 and only invite codes work.
+
+- User verification is **required** for every registration and assertion. Attestation is `none`, so any standards-compliant passkey works.
+- Each challenge is generated on the server, stored in Redis for 5 minutes, and tied to its purpose (sign-in, step-up, enrollment) and to the browser's pre-auth or session cookie. It is deleted on first use, whether or not verification then succeeds.
+- Signature counters are checked: a counter that does not increase (when the authenticator reports one) is rejected as a possible cloned key. Synced passkeys that always report 0 are accepted, as the spec allows.
+- Credentials (public keys, counters, names) and SHA-256 hashes of recovery codes live in one Redis key, `xrex:passkeys:v1`, updated with an atomic compare-and-set.
+- Session cookies (`xrex_session`, 7 days; `xrex_step`, 5 minutes) are HMAC-signed, `HttpOnly`, `Secure`, `SameSite=Strict`. Sessions carry an epoch that changes when a recovery code is redeemed or a passkey is removed, which signs out every other session. The step-up cookie embeds the session's nonce and epoch and only counts for that exact session, so a copied or stale step-up (from another browser, or from before a session was re-issued) is ignored.
+- `/api/auth/*` POSTs must be same-origin. Login, passkey verification, setup-token and recovery attempts are each rate-limited per client IP (10, or 5 for setup and recovery, per 15 minutes). Failures return generic messages.
+
+**RP ID and origins.** Passkeys are bound to an exact host. In production (`NODE_ENV=production` or `VERCEL_ENV=production`) both `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGINS` must be set and valid; otherwise every `/api/auth/*` request returns 503 with an error naming the missing variables, and existing passkey sessions stop unlocking paid routes. Production never derives them from request headers, and the same-origin check accepts only the pinned origins (whenever `WEBAUTHN_ORIGINS` is set, in any environment). Leave both unset for Preview and local development: the app then uses the request's own host, so `http://localhost:3000` works, and each preview URL needs its own enrollment. `vercel.app` itself is a public suffix and cannot be used as a shared RP ID. Use a separate Redis database for Preview so preview enrollments never touch production credentials.
+
+### First-time setup (in this order)
+
+1. Set `OWNER_PASSWORD`, `SESSION_SECRET` and Upstash Redis / Vercel KV in Vercel.
+2. In Vercel → Production, add `WEBAUTHN_RP_ID=<your production host>`, `WEBAUTHN_ORIGINS=https://<your production host>` and a fresh `PASSKEY_SETUP_TOKEN` (for example `openssl rand -base64 32`). Keep the token in your password manager.
+3. Deploy (or redeploy).
+4. Open the site, choose **Site owner? Sign in with a passkey**, enter the owner password, then the setup token, and create a passkey on this device.
+5. **Save the 10 recovery codes** shown next. They are displayed once only.
+6. Under **Manage passkeys**, add a second device (for example your phone, by QR code via "use another device"). Confirm you can sign in with each.
+7. Delete `PASSKEY_SETUP_TOKEN` from Vercel and redeploy. Once a passkey exists the token is ignored anyway, but deleting it means a later wipe of the passkey store cannot be used to re-enroll with an old token.
+
+### Adding, removing and recovering devices
+
+**Manage passkeys** lists every passkey with its name and its creation and last-use times. Adding a passkey, removing one and regenerating recovery codes each ask for a fresh passkey assertion first. The last remaining passkey cannot be removed: add the replacement first, or use a recovery code if the device is gone. Removing a passkey signs out every other session.
+
+- **Another registered device:** sign in with it, then remove the lost passkey.
+- **No device left:** enter the password, choose *Lost your device? Use a recovery code*, enter one unused code, and create a new passkey. Redeeming a code burns it, signs out all existing sessions, and gives that browser 10 minutes to register the replacement.
+- **No device and no codes (break-glass):** in the Upstash console, delete the key `xrex:passkeys:v1`. That removes every passkey and recovery code and returns to first-time setup, which again needs the password **and** a new `PASSKEY_SETUP_TOKEN`. There is deliberately no "reset passkeys" env flag, because a forgotten flag would silently downgrade sign-in to password-only.
 
 ## Deploy to Vercel
 

@@ -40,7 +40,7 @@ test('file import, API validation, and server credential UI',async({page,request
  const uninvited=await request.post('/api/ai',{data:{action:'draft',prompt:'Write a helpful post about AI.'}});
  expect(uninvited.status()).toBe(401);expect((await uninvited.json()).code).toBe('invite_required');
  await page.getByRole('tab',{name:'Build for an audience'}).click();
- await expect(page.locator('input[type=password]')).toHaveCount(0);
+ await expect(page.locator('input[type=password]:not(.owner-signin input)')).toHaveCount(0);
  // Deliberate mock: proves client wiring without spending a configured provider credential.
  await page.route('**/api/ai',route=>route.fulfill({json:draftFixture}));
  await page.getByRole('button',{name:'Generate posts'}).click();

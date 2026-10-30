@@ -1,6 +1,8 @@
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {NextResponse,type NextRequest} from 'next/server';
 import {UNKNOWN_IP,clientIp} from './client-ip';
+import {signedIn} from './server/auth';
+import {redisConfig} from './server/store';
 export {clientIp};
 
 export const INVITE_COOKIE='xrex_invite';
@@ -52,11 +54,6 @@ export const memoryStore:CounterStore={async incr(key){
  const count=(memory.get(key)||0)+1;memory.set(key,count);return count;
 }};
 export function resetMemoryStore(){memory.clear();memoryDay='';}
-function redisConfig(){
- const pairs=[[process.env.UPSTASH_REDIS_REST_URL,process.env.UPSTASH_REDIS_REST_TOKEN],[process.env.KV_REST_API_URL,process.env.KV_REST_API_TOKEN]];
- const pair=pairs.find(([url,token])=>url?.trim()&&token?.trim());
- return pair?{url:pair[0]!.trim().replace(/\/+$/,''),token:pair[1]!.trim()}:null;
-}
 function redisStore(url:string,token:string):CounterStore{return {async incr(key,ttlSeconds){
  const response=await fetch(`${url}/pipeline`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify([['INCR',key],['EXPIRE',key,String(ttlSeconds)]]),cache:'no-store',signal:AbortSignal.timeout(3000)});
  if(!response.ok)throw new Error(`Counter store returned ${response.status}`);
@@ -85,7 +82,7 @@ export function tooManyRequests(error:string){const retry=secondsUntilUtcMidnigh
 
 export async function paidAccessDenial(request:NextRequest):Promise<Response|null>{
  if(!paidFeaturesEnabled())return json({error:'AI and X features are paused by the site owner right now. Free post scoring still works.',code:'paid_disabled'},503);
- if(!hasValidInvite(request)){
+ if(!hasValidInvite(request)&&!await signedIn(request).catch(()=>false)){
   // A wrong cookie is an invite guess (cookies for a known code can be computed), so it shares the invite attempt limit.
   if(request.cookies.has(INVITE_COOKIE)&&await countInviteAttempt(request).catch(()=>0)>INVITE_ATTEMPTS_PER_IP)return tooManyRequests('Too many invite attempts today. Please try again after midnight UTC.');
   return json({error:'This feature needs an invite code. Enter yours at the top of the page to unlock AI and X features. Free post scoring works without one.',code:'invite_required'},401);
